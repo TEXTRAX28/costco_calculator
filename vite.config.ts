@@ -4,11 +4,23 @@ import { createReceiptApi } from "./server/receipt-api.mjs";
 import { privateFileDeny } from "./server/private-paths.mjs";
 import { openAiSettings } from "./server/openai-settings.mjs";
 
+const privacyEmail = process.env.GATHER_PRIVACY_EMAIL?.trim() ?? "";
+const privacyOperator = process.env.GATHER_PRIVACY_OPERATOR?.trim() ?? "";
+if (
+  privacyEmail &&
+  !/^[a-z0-9._+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)+$/i.test(privacyEmail)
+)
+  throw new Error("GATHER_PRIVACY_EMAIL must be a single email address.");
+
 export default defineConfig({
   cacheDir: ".vite",
   publicDir: ".receipt-assets",
   envDir: false as const,
   envPrefix: [],
+  define: {
+    "import.meta.env.GATHER_PRIVACY_EMAIL": JSON.stringify(privacyEmail),
+    "import.meta.env.GATHER_PRIVACY_OPERATOR": JSON.stringify(privacyOperator),
+  },
   // Avoid a first-PDF dependency optimization reload discarding selected files.
   optimizeDeps: {
     entries: ["index.html"],

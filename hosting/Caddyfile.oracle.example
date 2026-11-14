@@ -1,0 +1,19 @@
+# Set GATHER_BETA_IP to the VM's public IPv4 address, without a scheme or port.
+
+import gather.caddy
+
+# IP literals may arrive without SNI, and Oracle maps public IPs via NAT.
+{
+	import gather_options
+	default_sni {$GATHER_BETA_IP}
+}
+
+https://{$GATHER_BETA_IP} {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+			profile shortlived
+		}
+	}
+	import gather_site https://{$GATHER_BETA_IP}
+}

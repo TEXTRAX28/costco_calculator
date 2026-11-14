@@ -1,4 +1,6 @@
 const openAiData = "https://developers.openai.com/api/docs/guides/your-data";
+const privacyEmail: string = import.meta.env.GATHER_PRIVACY_EMAIL;
+const privacyOperator: string = import.meta.env.GATHER_PRIVACY_OPERATOR;
 
 export type LegalPage = "privacy" | "terms";
 
@@ -8,7 +10,8 @@ export default function LegalNotice({ page }: { page: LegalPage }) {
       {page === "privacy" ? (
         <>
           <h2>Privacy Policy</h2>
-          <p>This notice describes the local beta build.</p>
+          <p>This notice describes the private Gather beta.</p>
+          {privacyOperator && <p>{privacyOperator} operates Gather.</p>}
           <h3>On this device</h3>
           <p>
             Your browser processes photos, PDF pages and pasted text. Camera
@@ -56,8 +59,15 @@ export default function LegalNotice({ page }: { page: LegalPage }) {
             browser settings to remove the app cache or session.
           </p>
           <p>
-            For privacy questions or requests about server or provider data,
-            contact the person who provided your beta access. UK users can also{" "}
+            For privacy questions or requests about server or provider data,{" "}
+            {privacyEmail ? (
+              <>
+                email <a href={`mailto:${privacyEmail}`}>{privacyEmail}</a>.
+              </>
+            ) : (
+              "contact the person who provided your beta access."
+            )}{" "}
+            UK users can also{" "}
             <a
               href="https://ico.org.uk/make-a-complaint/"
               target="_blank"

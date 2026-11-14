@@ -1,0 +1,25 @@
+[Unit]
+Description=Gather receipt splitter
+After=network.target
+
+[Service]
+Type=simple
+User=gather
+Group=gather
+WorkingDirectory=/opt/gather
+EnvironmentFile=/etc/gather/server.env
+Environment=NODE_ENV=production
+Environment=OPENAI_ALLOWANCE_DIRECTORY=/var/lib/gather
+StateDirectory=gather
+StateDirectoryMode=0700
+UMask=0077
+ExecStart=/usr/local/bin/node /opt/gather/scripts/start.mjs
+Restart=on-failure
+RestartSec=3s
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectHome=yes
+ProtectSystem=strict
+
+[Install]
+WantedBy=multi-user.target

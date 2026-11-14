@@ -1,0 +1,64 @@
+(gather_options) {
+	admin off
+	persist_config off
+	servers {
+		timeouts {
+			read_header 10s
+			read_body 20s
+			write 120s
+			idle 2m
+		}
+	}
+}
+
+(gather_site) {
+	basic_auth {
+		{$GATHER_BETA_USER} {$GATHER_BETA_PASSWORD_HASH}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "same-origin"
+		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
+		-X-Powered-By
+	}
+
+	@scan {
+		method POST
+		path /api/receipts/openai
+	}
+	handle @scan {
+		# Check the browser's origin before creating the loopback request.
+		@bad_origin not header Origin {args[0]}
+		respond @bad_origin "Start the scan from this Gather address." 403
+
+		request_body {
+			max_size 18874368
+		}
+		reverse_proxy 127.0.0.1:4175 {
+			header_up Host 127.0.0.1:4175
+			header_up Origin http://127.0.0.1:4175
+			header_up -Authorization
+			header_up -Cookie
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+			transport http {
+				response_header_timeout 110s
+			}
+		}
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:4175 {
+			header_up Host 127.0.0.1:4175
+			header_up -Authorization
+			header_up -Cookie
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+		}
+	}
+}
