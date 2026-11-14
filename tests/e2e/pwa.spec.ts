@@ -170,8 +170,8 @@ test("app updates wait for a relaunch and cached navigation respects a server de
     readFile("dist/sw.js", "utf8"),
   ]);
   let newer = false;
-  let denied = false;
   let stalled = false;
+  let homeFailure = 0;
   let batches = 0;
   let statusChecks = 0;
   const configPath = "/api/receipts/openai/config";
@@ -207,9 +207,11 @@ test("app updates wait for a relaunch and cached navigation respects a server de
     } else if (stalled && path === "/") {
       // Simulate having Wi-Fi while the app server stops answering.
       return;
-    } else if (denied && path === "/") {
-      res.writeHead(401, { "content-type": "text/plain" });
-      res.end("Sign in to Gather.");
+    } else if (homeFailure && path === "/") {
+      res.writeHead(homeFailure, {
+        "content-type": "text/plain; charset=utf-8",
+      });
+      res.end("Gather gateway response.");
     } else if (newer && path === "/sw.js") {
       res.writeHead(200, {
         "content-type": "text/javascript",
@@ -295,11 +297,20 @@ test("app updates wait for a relaunch and cached navigation respects a server de
       relaunched.getByRole("region", { name: "Digital receipt" }),
     ).toContainText("£176.78");
     stalled = false;
-    denied = true;
-    expect((await relaunched.reload())?.status()).toBe(401);
-    await expect(relaunched.locator("body")).toContainText(
-      "Sign in to Gather.",
-    );
+    for (const status of [502, 503, 504]) {
+      homeFailure = status;
+      await relaunched.reload();
+      await expect(
+        relaunched.getByRole("region", { name: "Digital receipt" }),
+      ).toContainText("£176.78", { timeout: 4000 });
+    }
+    for (const status of [401, 403, 511]) {
+      homeFailure = status;
+      expect((await relaunched.reload())?.status()).toBe(status);
+      await expect(relaunched.locator("body")).toContainText(
+        "Gather gateway response.",
+      );
+    }
     expect(statusChecks).toBeGreaterThanOrEqual(2);
     expect(batches).toBe(1);
   } finally {

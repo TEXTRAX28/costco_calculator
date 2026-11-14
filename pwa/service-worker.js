@@ -5,6 +5,7 @@ const assets = /* GATHER_SHELL_ASSETS */ [];
 const cacheName = prefix + version;
 const paths = new Set(assets);
 const home = "/index.html";
+const temporaryGatewayErrors = new Set([502, 503, 504]);
 
 self.addEventListener("install", (event) => {
   event.waitUntil(
@@ -56,19 +57,17 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate" && ["/", home].includes(url.pathname)) {
     event.respondWith(
       (async () => {
-        // Honor an online sign-in page, redirect or denial. While authorized,
-        // use the installed HTML and its matching bundles until the next activation.
+        // Honor sign-in pages, redirects and access denials. The cached HTML
+        // provides the offline workspace and stays paired with its own bundles.
         const response = await fetch(request, {
           cache: "no-store",
           signal: AbortSignal.any([request.signal, AbortSignal.timeout(4000)]),
         }).catch(() => null);
-        if (
-          response &&
-          (!response.ok ||
-            response.redirected ||
-            response.headers.get("x-gather-shell") !== "1")
-        )
-          return response;
+        if (response?.redirected) return response;
+        if (response && !temporaryGatewayErrors.has(response.status)) {
+          if (!response.ok || response.headers.get("x-gather-shell") !== "1")
+            return response;
+        }
         const cache = await caches.open(cacheName);
         const cached = await cache.match(home);
         if (!cached) return response || Response.error();
