@@ -158,6 +158,77 @@ test.describe("scan connection recovery", () => {
     expect(checks).toBeGreaterThanOrEqual(3);
     expect(posts).toBe(0);
   });
+
+  test("phone pairing renews access in the same page and preserves selected photos", async ({
+    page,
+    context,
+  }) => {
+    let paired = false;
+    let scanPosts = 0;
+    await page.route("**/api/receipts/openai/config", async (route) => {
+      if (!paired) {
+        await route.fulfill({
+          status: 401,
+          headers: { "x-gather-pairing-required": "1" },
+        });
+        return;
+      }
+      await route.fulfill({
+        json: {
+          provider: "OpenAI",
+          model: "gpt-6-astra",
+          configured: true,
+          remaining: 2,
+          estimateGuardUsd: OPENAI_ESTIMATE_GUARD_USD,
+          availability: "ready",
+        },
+      });
+    });
+    await page.route("**/pair", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      expect(route.request().headers().accept).toBe("application/json");
+      const code = new URLSearchParams(route.request().postData()!).get("code");
+      paired = code === "ABCDEF123456";
+      if (paired) await route.fulfill({ status: 204 });
+      else
+        await route.fulfill({
+          status: 401,
+          json: {
+            error:
+              "Incorrect access code. Check the code on your PC and try again.",
+          },
+        });
+    });
+    await page.route("**/api/receipts/openai", async (route) => {
+      scanPosts++;
+      await route.abort();
+    });
+    await page.goto("/");
+    await page
+      .getByLabel("Upload receipt images")
+      .setInputFiles("tests/fixtures/prepared-section.jpg");
+
+    const input = page.getByLabel("Access code", { exact: true });
+    await input.fill("000000000000", { timeout: 4000 });
+    await input.press("Enter");
+    await expect(page.getByRole("alert")).toContainText(
+      "Incorrect access code",
+    );
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(page.locator(".selected-image")).toHaveCount(1);
+
+    await input.fill("ABCDEF123456");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await expect(page.getByText(/^2 scan attempts remaining/)).toBeVisible();
+    await expect(page.getByText(/^2 scan attempts remaining/)).toBeFocused();
+    await expect(input).toHaveCount(0);
+    await expect(page.locator(".selected-image")).toHaveCount(1);
+    await expect(
+      page.getByRole("button", { name: "Read receipt with OpenAI credits" }),
+    ).toBeDisabled();
+    expect(context.pages()).toEqual([page]);
+    expect(scanPosts).toBe(0);
+  });
 });
 
 test("app updates wait for a relaunch and cached navigation respects a server denial", async ({

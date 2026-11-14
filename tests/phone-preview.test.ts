@@ -137,6 +137,31 @@ describe("private phone preview", () => {
     expect(page.status).toBe(200);
     expect(page.text).toContain("Synthetic app");
   });
+  it("renews a preview session without navigation and keeps the code out of the response", async () => {
+    const expired = await request("/api/receipts/openai/config");
+    expect(expired.status).toBe(401);
+    expect(expired.headers["x-gather-pairing-required"]).toBe("1");
+    const headers = { origin, accept: "application/json" };
+    const failed = await pair("000000000000", headers);
+    expect(failed.status).toBe(401);
+    expect(failed.headers["cache-control"]).toBe("no-store");
+    expect(failed.headers["set-cookie"]).toBeUndefined();
+    expect(JSON.parse(failed.text).error).toMatch(/Incorrect access code/);
+    expect(failed.text).not.toContain("000000000000");
+
+    const renewed = await pair(code, headers);
+    expect(renewed.status).toBe(204);
+    expect(renewed.text).toBe("");
+    expect(renewed.headers.location).toBeUndefined();
+    expect(renewed.headers["cache-control"]).toBe("no-store");
+    expect(renewed.headers["set-cookie"]![0]).toMatch(
+      /; Secure; HttpOnly; SameSite=Strict;/,
+    );
+    const cookie = renewed.headers["set-cookie"]![0].split(";")[0];
+    const page = await request("/", { headers: { cookie } });
+    expect(page.text).toContain("Synthetic app");
+    expect(page.headers["x-gather-pairing-required"]).toBeUndefined();
+  });
   it("redirects a re-opened /pair URL to the home page", async () => {
     const result = await request("/pair");
     expect(result.status).toBe(303);
@@ -145,9 +170,11 @@ describe("private phone preview", () => {
   it("limits guessing and permits retry after the minute expires", async () => {
     for (let i = 0; i < 5; i++)
       expect((await pair("000000000000")).status).toBe(401);
-    const held = await pair();
+    const held = await pair(code, { origin, accept: "application/json" });
     expect(held.status).toBe(429);
-    expect(held.headers["content-type"]).toContain("text/html");
+    expect(held.headers["content-type"]).toContain("application/json");
+    expect(JSON.parse(held.text).error).toMatch(/Wait a minute/);
+    expect(held.headers["set-cookie"]).toBeUndefined();
     clock = 60000;
     expect((await pair()).status).toBe(303);
   });

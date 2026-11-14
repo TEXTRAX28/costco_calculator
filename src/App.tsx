@@ -95,6 +95,7 @@ import { requireCorrectedPhotoReview } from "./lib/capture-review";
 import RefundControl from "./RefundControl";
 import LegalNotice, { type LegalPage } from "./LegalNotice";
 import AppUpdate from "./AppUpdate";
+import PreviewPairing from "./PreviewPairing";
 type Step = AppState["step"];
 const steps: { id: Step; title: string }[] = [
   { id: "scan", title: "Receipt" },
@@ -309,7 +310,7 @@ export default function App() {
   const {
     online,
     checking: checkingAi,
-    requiresSignIn,
+    signIn,
     config: openaiConfig,
     check: checkScanConnection,
   } = useScanConnection();
@@ -317,7 +318,7 @@ export default function App() {
   const canScan = aiConsented && scanAvailable;
   const connectionNotice = !online
     ? "You’re offline. You can review, split or enter a receipt manually. Reconnect to scan."
-    : state.step !== "scan" && !checkingAi && !requiresSignIn && !openaiConfig
+    : state.step !== "scan" && !checkingAi && !signIn && !openaiConfig
       ? "Scanning is unavailable. You can keep editing and splitting this receipt."
       : null;
   const controller = useRef<AbortController | null>(null);
@@ -335,6 +336,7 @@ export default function App() {
   const uploadRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const scanAvailabilityStatus = useRef<HTMLParagraphElement>(null);
   const legalTrigger = useRef<HTMLButtonElement | null>(null);
   function openLegal(page: LegalPage, trigger: HTMLButtonElement) {
     legalTrigger.current = trigger;
@@ -344,19 +346,21 @@ export default function App() {
     ? "OpenAI scanning needs a connection."
     : checkingAi
       ? "Checking the app’s scan allowance…"
-      : requiresSignIn
-        ? "Sign in again to scan. Your selected photos are still here. You can also enter the receipt manually."
-        : openaiConfig?.configured
-          ? `${openaiConfig.remaining} scan ${openaiConfig.remaining === 1 ? "attempt" : "attempts"} remaining. An attempt counts once the server reserves it, even if the scan fails or is cancelled.`
-          : openaiConfig?.availability === "exhausted"
-            ? "The app’s OpenAI scan allowance is used up. Enter the receipt manually or ask the beta operator about access."
-            : openaiConfig?.availability === "missing-key"
-              ? "Add a server-side OpenAI API key and restart Gather."
-              : openaiConfig?.availability === "missing-allowance"
-                ? "Set the app’s OpenAI scan allowance and restart Gather."
-                : openaiConfig?.availability === "storage-unavailable"
-                  ? "Gather cannot check the scan allowance. Enter the receipt manually or ask the beta operator to check the server."
-                  : "Gather can’t reach the scan server. Check access and the connection, then check again or enter the receipt manually.";
+      : signIn === "pair"
+        ? "Enter the access code from your PC to reconnect the scanner."
+        : signIn === "gateway"
+          ? "Sign in again to scan. Your selected photos are still here. You can also enter the receipt manually."
+          : openaiConfig?.configured
+            ? `${openaiConfig.remaining} scan ${openaiConfig.remaining === 1 ? "attempt" : "attempts"} remaining. An attempt counts once the server reserves it, even if the scan fails or is cancelled.`
+            : openaiConfig?.availability === "exhausted"
+              ? "The app’s OpenAI scan allowance is used up. Enter the receipt manually or ask the beta operator about access."
+              : openaiConfig?.availability === "missing-key"
+                ? "Add a server-side OpenAI API key and restart Gather."
+                : openaiConfig?.availability === "missing-allowance"
+                  ? "Set the app’s OpenAI scan allowance and restart Gather."
+                  : openaiConfig?.availability === "storage-unavailable"
+                    ? "Gather cannot check the scan allowance. Enter the receipt manually or ask the beta operator to check the server."
+                    : "Gather can’t reach the scan server. Check access and the connection, then check again or enter the receipt manually.";
   const result = useMemo(
     () => calculateSplit(state, { readingNotes: "advisory" }),
     [state],
@@ -1136,10 +1140,25 @@ export default function App() {
                       Gather sends JPEG sections from your receipt photos or PDF
                       pages to OpenAI to prepare an editable draft.
                     </p>
-                    <p className="hint" role="status">
+                    <p
+                      className="hint"
+                      role="status"
+                      tabIndex={-1}
+                      ref={scanAvailabilityStatus}
+                    >
                       {scanAvailability}
                     </p>
-                    {requiresSignIn && (
+                    {signIn === "pair" && (
+                      <PreviewPairing
+                        onPaired={() => {
+                          scanAvailabilityStatus.current?.focus({
+                            preventScroll: true,
+                          });
+                          void checkScanConnection();
+                        }}
+                      />
+                    )}
+                    {signIn === "gateway" && (
                       <a
                         className="text-button"
                         href="/"

@@ -171,13 +171,20 @@ export function createPhoneHandler({
       if (pathname === "/pair" && req.method === "GET")
         return send(res, 303, "", { location: "/" });
       if (pathname === "/pair" && req.method === "POST") {
+        const json = req.headers.accept === "application/json";
+        const reject = (status, message) =>
+          json
+            ? send(res, status, JSON.stringify({ error: message }), {
+                "content-type": "application/json",
+              })
+            : showLogin(res, status, message);
         let state = attempts.get(remote);
         if (!state || now() - state.start >= 60000) {
           state = { start: now(), count: 0 };
           attempts.set(remote, state);
         }
         if (++state.count > 5)
-          return showLogin(res, 429, "Wait a minute before trying again.");
+          return reject(429, "Wait a minute before trying again.");
         const value = (
           new URLSearchParams((await body(req, 256)).toString()).get("code") ||
           ""
@@ -188,16 +195,15 @@ export function createPhoneHandler({
           !/^[A-F0-9]{12}$/.test(value) ||
           !timingSafeEqual(Buffer.from(value), Buffer.from(accessCode))
         )
-          return showLogin(
-            res,
+          return reject(
             401,
             "Incorrect access code. Check the code on your PC and try again.",
           );
         if (sessions.size >= 4) sessions.delete(sessions.values().next().value);
         const token = randomBytes(32).toString("base64url");
         sessions.add(token);
-        return send(res, 303, "", {
-          location: "/",
+        return send(res, json ? 204 : 303, "", {
+          ...(json ? {} : { location: "/" }),
           "set-cookie": `${cookieName}=${token}; Path=/; Secure; HttpOnly; SameSite=Strict; Max-Age=28800`,
         });
       }
@@ -215,10 +221,13 @@ export function createPhoneHandler({
                 401,
                 JSON.stringify({
                   error:
-                    "Your phone preview session ended. Reopen Gather to enter the access code again.",
+                    "Your phone preview session ended. Enter the access code again in Gather.",
                   attemptUsed: false,
                 }),
-                { "content-type": "application/json" },
+                {
+                  "content-type": "application/json",
+                  "x-gather-pairing-required": "1",
+                },
               )
             : send(res, 401, "Enter the access code on the home page.");
       if (pathname.startsWith("/api/receipts/")) {

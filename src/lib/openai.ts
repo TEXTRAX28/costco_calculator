@@ -7,7 +7,7 @@ import { MAX_AI_BODY_BYTES } from "./scan-limits.mjs";
 import { openaiStatusSchema } from "./openai-schema.mjs";
 
 export class ScanAccessError extends Error {
-  constructor() {
+  constructor(readonly recovery: "pair" | "gateway") {
     super("The scan server requires sign-in.");
   }
 }
@@ -19,7 +19,12 @@ export async function openaiConfiguration(signal: AbortSignal) {
     redirect: "error",
   });
   if (response.status === 401 || response.status === 403)
-    throw new ScanAccessError();
+    throw new ScanAccessError(
+      response.status === 401 &&
+        response.headers.get("x-gather-pairing-required") === "1"
+        ? "pair"
+        : "gateway",
+    );
   if (!response.ok) throw new Error("OpenAI connection unavailable");
   return openaiStatusSchema.parse(await response.json());
 }
