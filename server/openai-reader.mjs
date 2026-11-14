@@ -3,7 +3,10 @@ import {
   aiReceiptJsonSchema,
   aiReceiptSchema,
 } from "../src/lib/extraction-schema.mjs";
-import { MAX_AI_BODY_BYTES } from "../src/lib/scan-limits.mjs";
+import {
+  MAX_AI_BODY_BYTES,
+  OPENAI_RESPONSE_TIMEOUT_MS,
+} from "../src/lib/scan-limits.mjs";
 import {
   openaiRequestSchema,
   OPENAI_MODEL,
@@ -209,9 +212,13 @@ export function createOpenAiReader({
   grant = "",
   limit = 0,
   fetcher = globalThis.fetch,
-  timeoutMs = 90000,
+  timeoutMs = OPENAI_RESPONSE_TIMEOUT_MS,
 } = {}) {
-  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 90000)
+  if (
+    !Number.isInteger(timeoutMs) ||
+    timeoutMs < 1 ||
+    timeoutMs > OPENAI_RESPONSE_TIMEOUT_MS
+  )
     throw new TypeError("Invalid OpenAI timeout");
   const allowance = createDocumentAllowance({
     directory,

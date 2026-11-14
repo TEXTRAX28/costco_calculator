@@ -3,7 +3,7 @@ import type { ReceiptImage } from "./images";
 import type { ReadingContext } from "./reading-context.mjs";
 import { panelsForImages } from "./panel-transport";
 import { receiptFromOpenAi } from "./openai-draft";
-import { MAX_AI_BODY_BYTES } from "./scan-limits.mjs";
+import { MAX_AI_BODY_BYTES, SCAN_REQUEST_TIMEOUT_MS } from "./scan-limits.mjs";
 import { openaiStatusSchema } from "./openai-schema.mjs";
 
 export class ScanAccessError extends Error {
@@ -48,7 +48,7 @@ export async function extractWithOpenAi(
     throw new Error(
       "These receipt sections are too large together. Crop the photos or choose fewer sections.",
     );
-  const deadline = AbortSignal.timeout(95000);
+  const deadline = AbortSignal.timeout(SCAN_REQUEST_TIMEOUT_MS);
   const requestSignal = AbortSignal.any([signal, deadline]);
   if (typeof navigator !== "undefined" && navigator.onLine === false)
     throw new Error(

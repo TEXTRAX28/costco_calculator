@@ -106,6 +106,61 @@ describe("OpenAI client contract with fake transport", () => {
     ).rejects.toThrow("Attempt used");
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    ["accepts a result after a slow upload and scan", 104000, "176.78"],
+    [
+      "times out a stalled server without retrying",
+      116000,
+      "The scan timed out. If the request reached the server, it may have used an attempt",
+    ],
+  ])("%s", async (_description, responseTime, expected) => {
+    vi.useFakeTimers();
+    // Native AbortSignal deadlines do not use Vitest's fake clock.
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms) => {
+        const deadline = new AbortController();
+        setTimeout(() => deadline.abort(), ms);
+        return deadline.signal;
+      });
+    const fetcher = vi.fn(
+      (_url: string, { signal }: RequestInit) =>
+        new Promise<Response>((resolve, reject) => {
+          const response = setTimeout(
+            () =>
+              resolve(
+                new Response(JSON.stringify({ receipt: aiCostcoDraft() })),
+              ),
+            responseTime,
+          );
+          signal?.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(response);
+              reject(signal.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    try {
+      const result = extractWithOpenAi(
+        images,
+        new AbortController().signal,
+        () => {},
+      ).then(
+        (receipt) => receipt.printedTotal,
+        (error: unknown) => String(error),
+      );
+      await vi.advanceTimersByTimeAsync(responseTime);
+      expect(await result).toContain(expected);
+      expect(fetcher).toHaveBeenCalledTimes(1);
+    } finally {
+      timeout.mockRestore();
+      vi.useRealTimers();
+    }
+  });
   it("never posts an already-aborted scan", async () => {
     const fetcher = vi.fn();
     vi.stubGlobal("fetch", fetcher);

@@ -1,6 +1,9 @@
 import { createOpenAiReader, OpenAiError } from "./openai-reader.mjs";
 import { openaiRequestSchema } from "../src/lib/openai-schema.mjs";
-import { MAX_AI_BODY_BYTES } from "../src/lib/scan-limits.mjs";
+import {
+  MAX_AI_BODY_BYTES,
+  SCAN_UPLOAD_TIMEOUT_MS,
+} from "../src/lib/scan-limits.mjs";
 
 const configPath = "/api/receipts/openai/config";
 const scanPath = "/api/receipts/openai";
@@ -10,7 +13,7 @@ const oversized =
 /** A loopback API for the local app and its authenticated phone preview. */
 export function createReceiptApi({
   openaiReader = createOpenAiReader(),
-  uploadTimeoutMs = 15000,
+  uploadTimeoutMs = SCAN_UPLOAD_TIMEOUT_MS,
   now = Date.now,
 } = {}) {
   let active = false;
