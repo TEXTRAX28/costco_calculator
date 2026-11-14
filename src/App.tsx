@@ -315,6 +315,11 @@ export default function App() {
   } = useScanConnection();
   const scanAvailable = online && openaiConfig?.configured && !checkingAi;
   const canScan = aiConsented && scanAvailable;
+  const connectionNotice = !online
+    ? "You’re offline. You can review, split or enter a receipt manually. Reconnect to scan."
+    : state.step !== "scan" && !checkingAi && !requiresSignIn && !openaiConfig
+      ? "Scanning is unavailable. You can keep editing and splitting this receipt."
+      : null;
   const controller = useRef<AbortController | null>(null);
   const [rawText, setRawText] = useState("");
   const [legalPage, setLegalPage] = useState<LegalPage | null>(null);
@@ -892,10 +897,9 @@ export default function App() {
         className={`app-main ${state.step === "scan" ? "scan-page" : ""}`}
       >
         <AppUpdate />
-        {!online && (
+        {connectionNotice && (
           <p role="status" className="notice">
-            You’re offline. You can review, split or enter a receipt manually.
-            Reconnect to scan.
+            {connectionNotice}
           </p>
         )}
         <nav className="stepper" aria-label="Receipt workflow">

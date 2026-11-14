@@ -180,6 +180,10 @@ test("app updates wait for a relaunch and cached navigation respects a server de
     const path = new URL(req.url!, "http://localhost").pathname;
     if (req.method === "GET" && path === configPath) {
       statusChecks++;
+      if ([502, 503, 504].includes(homeFailure)) {
+        res.writeHead(503, { "cache-control": "no-store" }).end();
+        return;
+      }
       res.writeHead(200, {
         "content-type": "application/json",
         "cache-control": "no-store",
@@ -297,13 +301,21 @@ test("app updates wait for a relaunch and cached navigation respects a server de
       relaunched.getByRole("region", { name: "Digital receipt" }),
     ).toContainText("£176.78");
     stalled = false;
+    const scannerUnavailable = relaunched.getByRole("status").filter({
+      hasText:
+        "Scanning is unavailable. You can keep editing and splitting this receipt.",
+    });
     for (const status of [502, 503, 504]) {
       homeFailure = status;
       await relaunched.reload();
       await expect(
         relaunched.getByRole("region", { name: "Digital receipt" }),
       ).toContainText("£176.78", { timeout: 4000 });
+      await expect(scannerUnavailable).toBeVisible();
     }
+    homeFailure = 0;
+    await relaunched.reload();
+    await expect(scannerUnavailable).toHaveCount(0);
     for (const status of [401, 403, 511]) {
       homeFailure = status;
       expect((await relaunched.reload())?.status()).toBe(status);
