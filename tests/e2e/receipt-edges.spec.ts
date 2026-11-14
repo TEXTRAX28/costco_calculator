@@ -102,68 +102,72 @@ test("unclear edges keep the existing manual frame", async ({ page }) => {
   ).toBeEnabled();
 });
 
-test("reset cancels a pending edge worker and a late response cannot replace manual edits", async ({
-  page,
-}) => {
-  await upload(page);
-  let release!: () => void;
-  const held = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  await page.route("**/*receipt-edges.worker*", async (route) => {
-    await held;
-    await route.continue().catch(() => {}); // The owned worker can already be terminated.
-  });
-  const request = page.waitForRequest((r) =>
-    r.url().includes("receipt-edges.worker"),
-  );
-  await page
-    .getByRole("button", { name: "Find receipt edges", exact: true })
-    .click();
-  await request;
-  await page.getByRole("button", { name: "Reset crop", exact: true }).click();
-  const left = page.getByRole("slider", {
-    name: "Trim left percent",
-    exact: true,
-  });
-  await left.press("ArrowRight");
-  release();
-  await page.evaluate(
-    () =>
-      new Promise<void>((resolve) =>
-        requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
-      ),
-  );
-  await expect(left).toHaveValue("1");
-  await expect(
-    page.getByRole("button", { name: "Find receipt edges", exact: true }),
-  ).toBeEnabled();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(page.getByRole("dialog")).not.toBeVisible();
-  await expect(page.locator(".selected-image")).not.toContainText("cropped");
-});
+test.describe("edge worker failures", () => {
+  test.use({ serviceWorkers: "block" });
 
-test("an unavailable edge worker leaves manual cropping usable", async ({
-  page,
-}) => {
-  await upload(page);
-  await page.route("**/*receipt-edges.worker*", (route) =>
-    route.abort("failed"),
-  );
-  const left = page.getByRole("slider", {
-    name: "Trim left percent",
-    exact: true,
+  test("reset cancels a pending edge worker and a late response cannot replace manual edits", async ({
+    page,
+  }) => {
+    await upload(page);
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/*receipt-edges.worker*", async (route) => {
+      await held;
+      await route.continue().catch(() => {}); // The owned worker can already be terminated.
+    });
+    const request = page.waitForRequest((r) =>
+      r.url().includes("receipt-edges.worker"),
+    );
+    await page
+      .getByRole("button", { name: "Find receipt edges", exact: true })
+      .click();
+    await request;
+    await page.getByRole("button", { name: "Reset crop", exact: true }).click();
+    const left = page.getByRole("slider", {
+      name: "Trim left percent",
+      exact: true,
+    });
+    await left.press("ArrowRight");
+    release();
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+        ),
+    );
+    await expect(left).toHaveValue("1");
+    await expect(
+      page.getByRole("button", { name: "Find receipt edges", exact: true }),
+    ).toBeEnabled();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await expect(page.getByRole("dialog")).not.toBeVisible();
+    await expect(page.locator(".selected-image")).not.toContainText("cropped");
   });
-  await left.press("Home");
-  await left.press("ArrowRight");
-  await page
-    .getByRole("button", { name: "Find receipt edges", exact: true })
-    .click();
-  await expect(page.getByRole("alert")).toContainText(
-    "Adjust the frame manually",
-  );
-  await expect(left).toHaveValue("1");
-  await expect(
-    page.getByRole("button", { name: "Apply crop", exact: true }),
-  ).toBeEnabled();
+
+  test("an unavailable edge worker leaves manual cropping usable", async ({
+    page,
+  }) => {
+    await page.route("**/*receipt-edges.worker*", (route) =>
+      route.abort("failed"),
+    );
+    await upload(page);
+    const left = page.getByRole("slider", {
+      name: "Trim left percent",
+      exact: true,
+    });
+    await left.press("Home");
+    await left.press("ArrowRight");
+    await page
+      .getByRole("button", { name: "Find receipt edges", exact: true })
+      .click();
+    await expect(page.getByRole("alert")).toContainText(
+      "Adjust the frame manually",
+    );
+    await expect(left).toHaveValue("1");
+    await expect(
+      page.getByRole("button", { name: "Apply crop", exact: true }),
+    ).toBeEnabled();
+  });
 });

@@ -3,10 +3,21 @@ export const STORAGE_KEY = "gather.receipt.v1";
 export function loadDraft(storage: Pick<Storage, "getItem">): {
   state: AppState;
   warning: string;
+  saved: boolean;
 } {
+  let raw: string | null;
   try {
-    const raw = storage.getItem(STORAGE_KEY);
-    if (!raw) return { state: newState(), warning: "" };
+    raw = storage.getItem(STORAGE_KEY);
+  } catch {
+    return {
+      state: newState(),
+      warning:
+        "Draft storage is unavailable. Keep this tab open and export your summary before leaving.",
+      saved: false,
+    };
+  }
+  if (!raw) return { state: newState(), warning: "", saved: false };
+  try {
     if (raw.length > 800000)
       throw new Error("Stored draft exceeds the safety limit.");
     const input = JSON.parse(raw);
@@ -28,15 +39,17 @@ export function loadDraft(storage: Pick<Storage, "getItem">): {
         state,
         warning:
           "Your saved receipt needs its currency selected before amounts can be checked. Your items and assignments are still here.",
+        saved: true,
       };
     }
     // Receipt images and raw OCR are intentionally not persisted.
-    return { state, warning: "" };
+    return { state, warning: "", saved: true };
   } catch {
     return {
       state: newState(),
       warning:
-        "The saved draft could not be read safely. Start a new receipt; the unreadable draft has not been imported.",
+        "The saved draft could not be read safely. Start a new receipt or use Clear local data to remove the unreadable copy.",
+      saved: false,
     };
   }
 }

@@ -67,7 +67,8 @@ import { costcoDemo } from "./lib/demo";
 import { parseReceiptText } from "./lib/parser";
 import { readingBlobs, type ReceiptImage } from "./lib/images";
 import { prepareReceiptFile } from "./lib/receipt-files";
-import { extractWithOpenAi, openaiConfiguration } from "./lib/openai";
+import { extractWithOpenAi } from "./lib/openai";
+import { useScanConnection } from "./lib/scan-connection";
 import {
   applyItemEdit,
   applyReceiptEdit,
@@ -92,6 +93,8 @@ import ReceiptPhotos from "./ReceiptPhotos";
 import ReceiptCamera from "./ReceiptCamera";
 import { requireCorrectedPhotoReview } from "./lib/capture-review";
 import RefundControl from "./RefundControl";
+import LegalNotice, { type LegalPage } from "./LegalNotice";
+import AppUpdate from "./AppUpdate";
 type Step = AppState["step"];
 const steps: { id: Step; title: string }[] = [
   { id: "scan", title: "Receipt" },
@@ -280,13 +283,16 @@ export default function App() {
         state: newState(),
         warning:
           "Local storage is unavailable. Keep this tab open to preserve your draft.",
+        saved: false,
       };
     }
   }, []);
   const [state, setState] = useState<AppState>(initial.state);
   const [notice, setNotice] = useState(initial.warning);
   const [saveError, setSaveError] = useState("");
+  const [draftSaved, setDraftSaved] = useState(initial.saved);
   const storageConflict = useRef(false);
+  const clearedState = useRef<AppState | null>(null);
   const [images, setImages] = useState<ReceiptImage[]>([]);
   const scanSections = readingSectionCount(images);
   const imageRef = useRef<ReceiptImage[]>([]);
@@ -300,14 +306,18 @@ export default function App() {
   );
   const readingContext = scanCurrency ? { currency: scanCurrency } : undefined;
   const [aiConsented, setAiConsented] = useState(false);
-  const [checkingAi, setCheckingAi] = useState(false);
-  const [openaiConfig, setOpenaiConfig] = useState<Awaited<
-    ReturnType<typeof openaiConfiguration>
-  > | null>(null);
-  const canScan = aiConsented && openaiConfig?.configured && !checkingAi;
+  const {
+    online,
+    checking: checkingAi,
+    requiresSignIn,
+    config: openaiConfig,
+    check: checkScanConnection,
+  } = useScanConnection();
+  const scanAvailable = online && openaiConfig?.configured && !checkingAi;
+  const canScan = aiConsented && scanAvailable;
   const controller = useRef<AbortController | null>(null);
   const [rawText, setRawText] = useState("");
-  const [privacy, setPrivacy] = useState(false);
+  const [legalPage, setLegalPage] = useState<LegalPage | null>(null);
   const [zoomImage, setZoomImage] = useState<ReceiptImage | null>(null);
   const [cropTarget, setCropTarget] = useState<ReceiptImage | null>(null);
   const [personName, setPersonName] = useState("");
@@ -320,6 +330,28 @@ export default function App() {
   const uploadRef = useRef<HTMLInputElement>(null);
   const cameraRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const legalTrigger = useRef<HTMLButtonElement | null>(null);
+  function openLegal(page: LegalPage, trigger: HTMLButtonElement) {
+    legalTrigger.current = trigger;
+    setLegalPage(page);
+  }
+  const scanAvailability = !online
+    ? "OpenAI scanning needs a connection."
+    : checkingAi
+      ? "Checking the app’s scan allowance…"
+      : requiresSignIn
+        ? "Sign in again to scan. Your selected photos are still here. You can also enter the receipt manually."
+        : openaiConfig?.configured
+          ? `${openaiConfig.remaining} scan ${openaiConfig.remaining === 1 ? "attempt" : "attempts"} remaining. An attempt counts once the server reserves it, even if the scan fails or is cancelled.`
+          : openaiConfig?.availability === "exhausted"
+            ? "The app’s OpenAI scan allowance is used up. Enter the receipt manually or ask the beta operator about access."
+            : openaiConfig?.availability === "missing-key"
+              ? "Add a server-side OpenAI API key and restart Gather."
+              : openaiConfig?.availability === "missing-allowance"
+                ? "Set the app’s OpenAI scan allowance and restart Gather."
+                : openaiConfig?.availability === "storage-unavailable"
+                  ? "Gather cannot check the scan allowance. Enter the receipt manually or ask the beta operator to check the server."
+                  : "Gather can’t reach the scan server. Check access and the connection, then check again or enter the receipt manually.";
   const result = useMemo(
     () => calculateSplit(state, { readingNotes: "advisory" }),
     [state],
@@ -391,37 +423,25 @@ export default function App() {
     result.canFinalize;
   useEffect(() => setAiConsented(false), [images]);
   useEffect(() => {
-    const check = new AbortController();
-    setCheckingAi(true);
-    openaiConfiguration(
-      AbortSignal.any([check.signal, AbortSignal.timeout(5000)]),
-    )
-      .then((config) => {
-        if (!check.signal.aborted) setOpenaiConfig(config);
-      })
-      .catch(() => {
-        if (!check.signal.aborted) setOpenaiConfig(null);
-      })
-      .finally(() => {
-        if (!check.signal.aborted) setCheckingAi(false);
-      });
-    return () => check.abort();
-  }, []);
+    if (!online || !openaiConfig?.configured) setAiConsented(false);
+  }, [online, openaiConfig?.configured]);
   useEffect(() => {
     imageRef.current = images;
   }, [images]);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const abortWork = () => controller.current?.abort();
+    window.addEventListener("pagehide", abortWork);
+    return () => {
+      window.removeEventListener("pagehide", abortWork);
       controller.current?.abort();
       imageRef.current.forEach((i) => URL.revokeObjectURL(i.url));
-    },
-    [],
-  );
+    };
+  }, []);
   useEffect(() => {
     const changedElsewhere = (event: StorageEvent) => {
       if (
         (event.key === STORAGE_KEY || event.key === null) &&
-        event.newValue !== event.oldValue
+        (event.key === null || event.newValue !== event.oldValue)
       ) {
         storageConflict.current = true;
         setSaveError(
@@ -433,20 +453,31 @@ export default function App() {
     return () => window.removeEventListener("storage", changedElsewhere);
   }, []);
   useEffect(() => {
-    if (storageConflict.current) return;
+    if (
+      storageConflict.current ||
+      state === initial.state ||
+      state === clearedState.current
+    )
+      return;
     try {
       saveDraft(localStorage, state);
+      setDraftSaved(true);
       setSaveError("");
     } catch {
       setSaveError(
         "Draft could not be saved on this device. Keep this tab open and export your summary before leaving.",
       );
     }
-  }, [state]);
+  }, [state, initial.state]);
   useEffect(() => {
-    if (privacy || zoomImage || cropTarget) dialogRef.current?.showModal();
-    else dialogRef.current?.close();
-  }, [privacy, zoomImage, cropTarget]);
+    if (legalPage || zoomImage || cropTarget) {
+      dialogRef.current?.showModal();
+    } else {
+      dialogRef.current?.close();
+      legalTrigger.current?.focus({ preventScroll: true });
+      legalTrigger.current = null;
+    }
+  }, [legalPage, zoomImage, cropTarget]);
   useEffect(() => {
     if (validation?.step === state.step) return;
     document.getElementById("screen-title")?.focus({ preventScroll: true });
@@ -497,25 +528,35 @@ export default function App() {
   const reset = () => {
     if (
       !window.confirm(
-        "Delete this receipt, its people and assignments from this device?",
+        "Clear this receipt, imported photos and text, participant names and shares from this browser?",
       )
     )
       return;
-    controller.current?.abort();
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {
+      setSaveError(
+        "Could not clear the saved draft. Your work is still open. Try again or clear Gather’s site data in your browser settings.",
+      );
+      return;
+    }
+    const empty = newState();
+    clearedState.current = empty;
     storageConflict.current = false;
+    setDraftSaved(false);
+    setSaveError("");
     images.forEach((i) => URL.revokeObjectURL(i.url));
     setImages([]);
     setScanCurrency("");
     setRawText("");
     setImageError("");
     setAiConsented(false);
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      /* Storage unavailable: memory is still cleared. */
-    }
-    setState(newState());
-    setNotice("Receipt deleted. A fresh start.");
+    setPersonName("");
+    setValidation(null);
+    setValidationAttempted(null);
+    setState(empty);
+    setNotice("Receipt data cleared from this browser.");
+    window.scrollTo(0, 0);
   };
   async function addFiles(files: FileList | File[] | null) {
     if (!files || busyRef.current) return;
@@ -573,7 +614,13 @@ export default function App() {
       setAiConsented(false);
     } catch (e) {
       prepared.forEach((i) => URL.revokeObjectURL(i.url));
-      setImageError((e as Error).message);
+      setImageError(
+        controller.current?.signal.aborted
+          ? "Import cancelled. Previously selected receipt files are still here."
+          : e instanceof Error
+            ? e.message
+            : "Could not import the receipt. Try a smaller file or enter it manually.",
+      );
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -609,6 +656,7 @@ export default function App() {
         setScanStatus,
         readingContext,
       );
+      scanController.signal.throwIfAborted();
       replaceReceipt(
         requireCorrectedPhotoReview(
           receipt,
@@ -624,9 +672,7 @@ export default function App() {
       );
     } finally {
       controller.current = null;
-      await openaiConfiguration(AbortSignal.timeout(5000))
-        .then(setOpenaiConfig)
-        .catch(() => setOpenaiConfig(null));
+      void checkScanConnection();
       busyRef.current = false;
       setBusy(false);
       setScanStatus("");
@@ -771,9 +817,9 @@ export default function App() {
       <div className="small-note">
         <ShieldCheck size={18} />
         <p>
-          Original photos are kept in memory. OpenAI scans send receipt sections
-          to the selected provider only with your agreement. The editable draft
-          is saved in this browser.
+          Original previews stay in the current tab. An approved scan sends
+          receipt sections to OpenAI. The editable draft is saved in this
+          browser when storage is available.
         </p>
       </div>
       {images.length > 0 ? (
@@ -796,8 +842,8 @@ export default function App() {
       ) : (
         ["ocr", "ai"].includes(state.receipt.source) && (
           <p className="hint">
-            Photos are kept only in memory. Upload them again after a refresh to
-            compare the original.
+            Upload the original photos again to compare them with this saved
+            draft.
           </p>
         )
       )}
@@ -826,11 +872,9 @@ export default function App() {
         <nav aria-label="Help">
           <button
             className="text-button"
-            onClick={() => {
-              setPrivacy(true);
-            }}
+            onClick={(event) => openLegal("privacy", event.currentTarget)}
           >
-            Privacy first <ShieldCheck size={15} />
+            Privacy Policy <ShieldCheck size={15} />
           </button>
           <button
             className="button button-quiet new-receipt"
@@ -847,6 +891,13 @@ export default function App() {
         id="main"
         className={`app-main ${state.step === "scan" ? "scan-page" : ""}`}
       >
+        <AppUpdate />
+        {!online && (
+          <p role="status" className="notice">
+            You’re offline. You can review, split or enter a receipt manually.
+            Reconnect to scan.
+          </p>
+        )}
         <nav className="stepper" aria-label="Receipt workflow">
           {steps.map((step, i) => (
             <button
@@ -1078,47 +1129,55 @@ export default function App() {
                   <legend>OpenAI scan</legend>
                   <div className="ai-reader-info">
                     <p>
-                      Gather sends the selected receipt photos and rendered PDF
-                      pages to OpenAI to prepare an editable receipt.
+                      Gather sends JPEG sections from your receipt photos or PDF
+                      pages to OpenAI to prepare an editable draft.
                     </p>
                     <p className="hint" role="status">
-                      {checkingAi
-                        ? "Checking the app's OpenAI allowance…"
-                        : openaiConfig?.configured
-                          ? `App allowance: ${openaiConfig.remaining} scan ${openaiConfig.remaining === 1 ? "attempt" : "attempts"} remaining. Failed or cancelled attempts can still use credits.`
-                          : openaiConfig?.availability === "missing-key"
-                            ? "Add a server-side OpenAI API key and restart Gather."
-                            : openaiConfig?.availability === "missing-allowance"
-                              ? "Set the app’s OpenAI scan allowance and restart Gather."
-                              : openaiConfig?.availability === "exhausted"
-                                ? "The app’s OpenAI scan allowance is used up."
-                                : "OpenAI scanning is unavailable. Check the local server and its allowance storage."}
+                      {scanAvailability}
                     </p>
-                    <p className="hint">
-                      Crop out membership and payment details. OpenAI API
-                      content is excluded from training by default, but safety
-                      logs and caching can retain content and processing may
-                      occur outside your country. Gather does not save these
-                      photos or model requests.{" "}
+                    {requiresSignIn && (
                       <a
-                        href="https://developers.openai.com/api/docs/guides/your-data"
+                        className="text-button"
+                        href="/"
                         target="_blank"
-                        rel="noreferrer"
+                        rel="noopener"
                       >
-                        OpenAI’s data-use information
+                        Sign in in a new tab
                       </a>
+                    )}
+                    {online && !checkingAi && !openaiConfig?.configured && (
+                      <button
+                        type="button"
+                        className="text-button"
+                        onClick={() => void checkScanConnection()}
+                      >
+                        Check scan connection
+                      </button>
+                    )}
+                    <p className="hint">
+                      Crop out membership and payment details. OpenAI may retain
+                      scan content for safety monitoring.{" "}
+                      <button
+                        type="button"
+                        className="inline-link"
+                        onClick={(event) =>
+                          openLegal("privacy", event.currentTarget)
+                        }
+                      >
+                        Read the Privacy Policy
+                      </button>
                     </p>
                     <label className="check-line">
                       <input
                         type="checkbox"
                         checked={aiConsented}
-                        disabled={checkingAi || !openaiConfig?.configured}
+                        disabled={!scanAvailable}
                         onChange={(event) =>
                           setAiConsented(event.target.checked)
                         }
                       />
                       Send these receipt sections to OpenAI and use API credits
-                      for this scan. I have read the notice above.
+                      for this scan.
                     </label>
                   </div>
                 </fieldset>
@@ -1149,6 +1208,9 @@ export default function App() {
                     )}
                   </div>
                 )}
+                <span className="visually-hidden" role="status">
+                  {busy ? scanStatus : ""}
+                </span>
                 <div className="or-divider">
                   <span>or</span>
                 </div>
@@ -2562,29 +2624,44 @@ export default function App() {
         )}
         <footer className="site-footer">
           <span>
-            <Leaf size={15} />
-            Made for the things we share.
+            {saveError
+              ? "Latest changes not saved"
+              : draftSaved
+                ? "Draft saved on this device"
+                : "No draft saved on this device"}
           </span>
-          <span>
-            {saveError ? "Draft not saved" : "Draft saved on this device"}
-          </span>
+          <button
+            className="text-button"
+            onClick={(event) => openLegal("terms", event.currentTarget)}
+          >
+            Beta Terms
+          </button>
           <button className="text-button" disabled={busy} onClick={reset}>
             <RotateCcw size={14} />
-            Delete / reset receipt
+            Clear local data
           </button>
+          <details className="install-help">
+            <summary>Install Gather</summary>
+            <p>
+              On iPhone, open this page in Safari and use Share → Add to Home
+              Screen. If shown, turn on Open as Web App. In other browsers, use
+              the browser’s install option when available.
+            </p>
+          </details>
         </footer>
       </main>
       <dialog
         ref={dialogRef}
-        onCancel={() => {
+        onCancel={(event) => {
+          event.preventDefault();
           setCropTarget(null);
-          setPrivacy(false);
+          setLegalPage(null);
           setZoomImage(null);
         }}
         onClick={(e) => {
           if (e.target === dialogRef.current) {
             setCropTarget(null);
-            setPrivacy(false);
+            setLegalPage(null);
             setZoomImage(null);
           }
         }}
@@ -2595,7 +2672,9 @@ export default function App() {
               ? zoomImage.geometry
                 ? "Original and corrected receipt"
                 : "Original receipt image"
-              : "Your privacy at Gather"
+              : legalPage === "terms"
+                ? "Beta Terms"
+                : "Privacy Policy"
         }
       >
         <button
@@ -2603,7 +2682,7 @@ export default function App() {
           aria-label="Close dialog"
           onClick={() => {
             setCropTarget(null);
-            setPrivacy(false);
+            setLegalPage(null);
             setZoomImage(null);
           }}
         >
@@ -2651,50 +2730,9 @@ export default function App() {
             )}
             <ReceiptPhotos key={zoomImage.id} image={zoomImage} />
           </>
-        ) : (
-          <div className="privacy-dialog">
-            <ShieldCheck size={32} />
-            <h2>Receipt privacy</h2>
-            <p>
-              When you approve a scan, Gather sends the selected photos or
-              rendered PDF pages to OpenAI. The scan can use API credits. The
-              key stays on the server. OpenAI handles submitted images under its{" "}
-              <a
-                href="https://developers.openai.com/api/docs/guides/your-data"
-                target="_blank"
-                rel="noreferrer"
-              >
-                API data policy
-              </a>
-              .
-            </p>
-            <p>
-              Your extracted draft and names are saved in this browser’s local
-              storage so you can continue after a refresh. People with access to
-              this browser profile can read them. Photos and imported text are
-              only kept in memory and disappear on refresh or when the tab
-              closes.
-            </p>
-            <p>
-              Delete / reset receipt removes this app’s saved draft and current
-              image previews. Exported or copied summaries remain wherever you
-              save or send them. The server keeps scan allowance records. The
-              browser keeps your draft and the names you enter.
-            </p>
-            <p>
-              Camera availability depends on your browser. A phone accessing the
-              app over a network normally needs HTTPS for camera and clipboard
-              features.
-            </p>
-            <button
-              className="button button-primary"
-              onClick={() => setPrivacy(false)}
-            >
-              Sounds good
-              <Check size={17} />
-            </button>
-          </div>
-        )}
+        ) : legalPage ? (
+          <LegalNotice page={legalPage} />
+        ) : null}
       </dialog>
     </>
   );

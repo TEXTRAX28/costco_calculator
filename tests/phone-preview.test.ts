@@ -157,7 +157,9 @@ describe("private phone preview", () => {
     ).toBe(403);
   });
   it("denies API access before authentication and rejects a forged cookie", async () => {
-    expect((await request("/api/receipts/providers")).status).toBe(401);
+    const config = await request("/api/receipts/openai/config");
+    expect(config.status).toBe(401);
+    expect(JSON.parse(config.text)).toMatchObject({ attemptUsed: false });
     expect(
       (
         await request("/assets/app.js", {

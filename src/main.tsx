@@ -1,13 +1,14 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { STORAGE_KEY } from "./lib/storage";
 import "./styles.css";
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
-  { failed: boolean }
+  { failed: boolean; error?: string }
 > {
-  state = { failed: false };
+  state: { failed: boolean; error?: string } = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
   }
@@ -23,12 +24,22 @@ class ErrorBoundary extends React.Component<
           <button onClick={() => location.reload()}>Reload app</button>
           <button
             onClick={() => {
-              localStorage.removeItem("gather.receipt.v1");
-              location.reload();
+              if (!window.confirm("Clear this browser’s saved Gather draft?"))
+                return;
+              try {
+                localStorage.removeItem(STORAGE_KEY);
+                location.reload();
+              } catch {
+                this.setState({
+                  error:
+                    "Could not clear the saved draft. Use the browser’s site settings to clear Gather data.",
+                });
+              }
             }}
           >
             Delete local draft
           </button>
+          {this.state.error && <p role="alert">{this.state.error}</p>}
         </main>
       );
     return this.props.children;

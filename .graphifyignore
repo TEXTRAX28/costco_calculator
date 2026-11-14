@@ -12,6 +12,7 @@ uploads/
 private-receipts/
 # Agent instructions and this index's maintenance script are not app source.
 AGENTS.md
+HANDOFF.md
 scripts/update-graph.py
 # Keep the source index bounded; indexed tests describe their fixture behaviour.
 tests/fixtures/

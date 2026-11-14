@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "./editor-fixture";
 import path from "node:path";
 
+test.use({ serviceWorkers: "block" });
+
 const fixture = (name: string) => path.resolve("tests/fixtures/pdfs", name);
 async function setup(page: Page) {
   const requests = { posts: [] as string[], external: [] as string[] };

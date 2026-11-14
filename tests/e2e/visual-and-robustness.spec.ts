@@ -97,17 +97,12 @@ test("separate browser contexts do not see each other’s receipt data", async (
     await expect(
       other.getByRole("heading", { name: "Big shop. Little maths." }),
     ).toBeVisible();
-    // A visible heading can precede React's storage effect. Require a saved
-    // empty draft, rather than treating a missing value as proof of isolation.
-    await expect
-      .poll(() =>
-        other.evaluate(
-          () =>
-            JSON.parse(localStorage.getItem("gather.receipt.v1") || "null")
-              ?.receipt?.items?.length,
-        ),
-      )
-      .toBe(0);
+    await expect(
+      other.getByText("No draft saved on this device", { exact: true }),
+    ).toBeVisible();
+    expect(
+      await other.evaluate(() => localStorage.getItem("gather.receipt.v1")),
+    ).toBeNull();
   } finally {
     await isolated.close();
   }
@@ -140,13 +135,37 @@ test("unavailable browser storage preserves the in-memory workflow with a warnin
     };
   });
   await page.goto("/");
+  await page.getByRole("button", { name: "Enter manually" }).click();
   await expect(
     page.getByRole("status").filter({ hasText: "could not be saved" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Enter manually" }).click();
   await expect(
     page.getByRole("textbox", { name: "Merchant", exact: true }),
   ).toBeVisible();
+});
+
+test("a failed clear keeps the saved receipt available for export and retry", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the Costco demo" }).click();
+  await expect(page.getByText("Draft saved on this device")).toBeVisible();
+  await page.evaluate(() => {
+    Storage.prototype.removeItem = () => {
+      throw new DOMException("Storage access denied", "SecurityError");
+    };
+  });
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Clear local data" }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Could not clear" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Digital receipt" }),
+  ).toContainText("£176.78");
+  expect(
+    await page.evaluate(() => localStorage.getItem("gather.receipt.v1")),
+  ).toContain("176.78");
 });
 
 test("a second tab cannot silently overwrite an open draft", async ({

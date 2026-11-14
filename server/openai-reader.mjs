@@ -15,9 +15,10 @@ import { validatePreparedJpeg } from "./prepared-jpeg.mjs";
 
 export const OPENAI_ENDPOINT = "https://api.openai.com/v1/responses";
 export class OpenAiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, attemptUsed = false) {
     super(message);
     this.status = status;
+    this.attemptUsed = attemptUsed;
   }
 }
 const invalid = () =>
@@ -279,6 +280,7 @@ export function createOpenAiReader({
           throw new OpenAiError(
             error.message === "Receipt allowance is exhausted" ? 429 : 503,
             "OpenAI's local attempt allowance is unavailable or used up. No request was sent.",
+            error.message === "Receipt allowance is exhausted" ? false : null,
           );
         }
         abort.throwIfAborted();
@@ -318,13 +320,19 @@ export function createOpenAiReader({
         await reservation
           ?.finish(abort.aborted ? "cancelled" : "failed", "unknown")
           .catch(() => {});
-        if (error instanceof OpenAiError) throw error;
+        if (error instanceof OpenAiError) {
+          if (reservation) error.attemptUsed = true;
+          throw error;
+        }
         if (abort.aborted)
           throw new OpenAiError(
             504,
-            "The OpenAI scan was cancelled or timed out. An attempt that reached the provider may still use API credits. No automatic retry was made.",
+            "The OpenAI scan was cancelled or timed out. Your photos are still available. Try fewer sections or enter the receipt manually.",
+            Boolean(reservation),
           );
-        throw invalid();
+        const errorResponse = invalid();
+        errorResponse.attemptUsed = Boolean(reservation);
+        throw errorResponse;
       } finally {
         active = false;
       }

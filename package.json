@@ -10,7 +10,7 @@
     "predev": "npm run prepare:pdf",
     "dev": "vite --host 127.0.0.1 --port 5175 --configLoader native",
     "prebuild": "npm run prepare:pdf",
-    "build": "npm run typecheck && vite build --configLoader native",
+    "build": "npm run typecheck && vite build --configLoader native && node scripts/build-pwa.mjs",
     "start": "node scripts/start.mjs",
     "preview": "npm start",
     "preview:phone": "node scripts/phone-preview.mjs",

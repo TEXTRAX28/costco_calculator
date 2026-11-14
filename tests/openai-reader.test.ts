@@ -250,6 +250,7 @@ describe("OpenAI receipt reader; offline transports only", () => {
     const client = await reader();
     await expect(client.model.extract(largeBatch)).rejects.toMatchObject({
       status: 413,
+      attemptUsed: false,
       message:
         "These receipt sections are too large to scan together. Use tighter crops or scan fewer photos or pages at once.",
     });
@@ -372,6 +373,7 @@ describe("OpenAI receipt reader; offline transports only", () => {
     });
     await expect(client.model.extract(panels)).rejects.toMatchObject({
       status: 504,
+      attemptUsed: true,
     });
     expect(cancelled).toBe(true);
     expect((await client.model.getStatus()).remaining).toBe(0);
@@ -514,7 +516,9 @@ describe("OpenAI actual loopback API; upstream mocked", () => {
   });
   it("requires both consent flags before spending, then uses the dedicated key and ledger", async () => {
     const client = await api();
-    expect((await client.post({ consent: true, panels })).status).toBe(400);
+    const missingConsent = await client.post({ consent: true, panels });
+    expect(missingConsent.status).toBe(400);
+    expect(await missingConsent.json()).toMatchObject({ attemptUsed: false });
     expect(client.upstream).not.toHaveBeenCalled();
     const result = await client.post({
       consent: true,
@@ -532,6 +536,17 @@ describe("OpenAI actual loopback API; upstream mocked", () => {
       remaining: 0,
     });
     expect(JSON.stringify(status)).not.toContain(fakeKey);
+  });
+  it("distinguishes an upstream failure from a second submission on an exhausted allowance", async () => {
+    const upstream = vi.fn(async () => new Response(null, { status: 503 }));
+    const client = await api({}, { fetcher: upstream });
+    const failed = await client.post(authorized);
+    expect(failed.status).toBe(502);
+    expect(await failed.json()).toMatchObject({ attemptUsed: true });
+    const refused = await client.post(authorized);
+    expect(refused.status).toBe(429);
+    expect(await refused.json()).toMatchObject({ attemptUsed: false });
+    expect(upstream).toHaveBeenCalledTimes(1);
   });
   it("rejects cross-origin requests before touching the upstream", async () => {
     const client = await api();

@@ -15,7 +15,7 @@ Use npm run dev for development at [port 5175](http://127.0.0.1:5175/). On Windo
 
 Environment variables take precedence over .env.local. An existing OPEN_AI_KEY also works as an alias. Keep keys in the ignored settings file or a server-side secret store. Keep the allowance ID and directory stable across restarts. The default directory is .receipt-reader-state/openai. An allowance counts attempted submissions, including provider failures and cancellations after reservation. It applies independently of account billing. Gather accepts requests with a server-side cost estimate of up to US$3. OpenAI bills actual usage.
 
-The included server is for a local installation. It binds to loopback and has no public account or authentication system. Keep it off public networks. For a temporary private phone test, start the app on your PC, connect the phone to the same network, and run npm run preview:phone. This command requires OpenSSL and prints the HTTPS preview, certificate download and local pairing-code file. Install and trust the test certificate on the phone. The preview expires after eight hours. [Apple’s certificate trust guide](https://support.apple.com/en-us/102390)
+The included Node server binds to loopback. A future invited beta can use the protected HTTPS proxy in the [beta readiness guide](docs/BETA_READINESS.md). For a temporary private phone test, start the app on your PC, connect the phone to the same network, and run npm run preview:phone. This command requires OpenSSL and prints the HTTPS preview, certificate download and local pairing-code file. Install and trust the test certificate on the phone. The preview expires after eight hours. [Apple’s certificate trust guide](https://support.apple.com/en-us/102390)
 
 ## Scanning and privacy
 
@@ -26,9 +26,13 @@ The included server is for a local installation. It binds to loopback and has no
 
 Gather requests store: false from OpenAI. OpenAI API content is excluded from model training by default unless the account opts in. Provider safety logging, caching and regional processing are governed by OpenAI's API policy. [OpenAI API data controls](https://developers.openai.com/api/docs/guides/your-data)
 
-The browser saves the editable draft and participant names locally. Photos and pasted text clear on refresh. Delete / reset receipt clears the saved draft and active photos. The server keeps a minimal allowance record with a generated request ID and outcome. The scan does not automatically retry. If it fails, the photos remain available for a new attempt or manual entry.
+The browser saves the editable draft and participant names locally when storage is available. Reopening the app restores that draft. Original previews and pasted text live in the current tab. Clear local data removes the saved draft and active photos. The server keeps a minimal allowance record with a generated request ID and outcome. Failed scans leave the current photos available for manual entry or another approved attempt.
 
 Supported uploads are JPEG, PNG, still WebP and PDF, up to 12 MiB per file and 12 images or pages per receipt. The browser checks signatures and image dimensions and renders PDF pages locally. The API accepts up to 24 prepared JPEG sections and 18 MiB of JSON. The server allows one scan at a time, two submissions per minute and ten per hour, with a 15-second upload deadline and a 90-second OpenAI deadline.
+
+## Install on a phone
+
+Open the built app over trusted HTTPS. In Safari, use Share → Add to Home Screen and enable Open as Web App if the option appears. Other browsers can offer installation from their menu. After an online visit, the app shell can reopen offline for manual entry, review and splitting. Scanning needs a connection. When an update is ready, finish the receipt, close all Gather windows, then reopen it. [Apple’s iPhone guide](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/27/ios/27)
 
 ## Checks
 

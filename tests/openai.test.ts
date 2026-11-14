@@ -113,7 +113,16 @@ describe("OpenAI client contract with fake transport", () => {
     controller.abort();
     await expect(
       extractWithOpenAi([], controller.signal, () => {}),
-    ).rejects.toThrow();
+    ).rejects.toThrow("Scan cancelled before upload. No app attempt was used.");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it("keeps the upload local while the browser reports offline", async () => {
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    vi.stubGlobal("navigator", { onLine: false });
+    await expect(
+      extractWithOpenAi(images, new AbortController().signal, () => {}),
+    ).rejects.toThrow("You’re offline. No scan was sent.");
     expect(fetcher).not.toHaveBeenCalled();
   });
   it("does not accept a returned draft after cancellation", async () => {

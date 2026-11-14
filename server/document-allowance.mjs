@@ -65,6 +65,7 @@ export function createDocumentAllowance({ directory, account, grant, limit }) {
       };
       try {
         await handle.writeFile(JSON.stringify(record) + "\n");
+        await handle.sync();
       } catch {
         await handle.close();
         throw new Error("Receipt allowance storage is unavailable");

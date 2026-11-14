@@ -9,6 +9,7 @@ const mime = {
   ".css": "text/css; charset=utf-8",
   ".wasm": "application/wasm",
   ".svg": "image/svg+xml",
+  ".webmanifest": "application/manifest+json",
   ".json": "application/json",
   ".png": "image/png",
   ".jpg": "image/jpeg",
@@ -21,6 +22,8 @@ const mime = {
   ".woff": "font/woff",
   ".woff2": "font/woff2",
 };
+const appFiles = new Set(["index.html", "manifest.webmanifest", "sw.js"]);
+const assetDirectories = new Set(["assets", "pdf-assets", "icons"]);
 
 export async function indexBuiltFiles(directory) {
   const root = resolve(directory);
@@ -30,12 +33,12 @@ export async function indexBuiltFiles(directory) {
       if (entry.isSymbolicLink() || entry.name.startsWith(".")) continue;
       const file = resolve(folder, entry.name);
       if (entry.isDirectory()) {
-        if (folder !== root || ["assets", "pdf-assets"].includes(entry.name))
+        if (folder !== root || assetDirectories.has(entry.name))
           await visit(file);
       } else if (
         entry.isFile() &&
         Object.hasOwn(mime, extname(file)) &&
-        (folder !== root || entry.name === "index.html")
+        (folder !== root || appFiles.has(entry.name))
       ) {
         routes.set("/" + relative(root, file).replaceAll("\\", "/"), file);
       }
@@ -47,13 +50,18 @@ export async function indexBuiltFiles(directory) {
 }
 
 export async function serveBuiltFile(req, res, pathname, routes) {
-  const file = routes.get(pathname === "/" ? "/index.html" : pathname);
+  const path = pathname === "/" ? "/index.html" : pathname;
+  const file = routes.get(path);
   if (!file) return false;
   if (req.method !== "GET" && req.method !== "HEAD") {
     res.writeHead(405, { allow: "GET, HEAD" }).end();
     return true;
   }
   const info = await stat(file);
+  const isAppShell =
+    appFiles.has(path.slice(1)) ||
+    path.startsWith("/assets/") ||
+    path.startsWith("/icons/");
   res.writeHead(200, {
     "content-type": mime[extname(file)],
     "content-length": info.size,
@@ -61,6 +69,8 @@ export async function serveBuiltFile(req, res, pathname, routes) {
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
     "referrer-policy": "same-origin",
+    "permissions-policy": "camera=(self), microphone=(), geolocation=()",
+    ...(isAppShell ? { "x-gather-shell": "1" } : {}),
   });
   if (req.method === "HEAD") res.end();
   else {

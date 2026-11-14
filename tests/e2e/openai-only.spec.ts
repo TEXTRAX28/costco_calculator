@@ -1,7 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { prepareOpenAiRequest } from "../../server/openai-reader.mjs";
 import { OPENAI_ESTIMATE_GUARD_USD } from "../../src/lib/openai-schema.mjs";
+import { aiCostcoDraft } from "../fixtures/ai-receipt";
+
+// These journeys intercept the page transport. The PWA suite uses real workers.
+test.use({ serviceWorkers: "block" });
 
 const scan = (page: Page) =>
   page.getByRole("button", {
@@ -39,7 +44,11 @@ async function uploadPhotos(page: Page, count: number, height = 850) {
 }
 
 // Fake responses exercise browser transport and review without using credits.
-async function stubOpenAi(page: Page, fails = false) {
+async function stubOpenAi(
+  page: Page,
+  fails = false,
+  receipt?: ReturnType<typeof aiCostcoDraft>,
+) {
   const requests: { photo: number; part: number }[][] = [];
   let remaining = 1;
   await page.route("**/api/receipts/openai/config", (route) =>
@@ -75,13 +84,13 @@ async function stubOpenAi(page: Page, fails = false) {
     if (fails) {
       await route.fulfill({
         status: 429,
-        json: { error: "OpenAI rate limit reached." },
+        json: { error: "OpenAI rate limit reached.", attemptUsed: true },
       });
       return;
     }
     await route.fulfill({
       json: {
-        receipt: {
+        receipt: receipt ?? {
           merchant: "SYNTHETIC CAFE",
           date: "",
           currency: "GBP",
@@ -225,6 +234,58 @@ test("a text-bearing PDF sends its rendered pages through the OpenAI scan", asyn
   ]);
 });
 
+test("a mocked two-photo Costco scan exports the exact VAT and split", async ({
+  page,
+}) => {
+  const requests = await stubOpenAi(page, false, aiCostcoDraft());
+  await page.goto("/");
+  await uploadPhotos(page, 2);
+  await consent(page).check();
+  await scan(page).click();
+  const receipt = page.getByRole("region", { name: "Digital receipt" });
+  await expect(receipt.locator('[data-testid^="digital-item-"]')).toHaveCount(
+    18,
+  );
+  await expect(receipt.getByTestId("digital-item-3")).toContainText("−£2.00");
+  await expect(receipt).toContainText("£13.62");
+  await expect(receipt.locator(".receipt-grand-total")).toContainText(
+    "£176.78",
+  );
+  expect(requests).toHaveLength(1);
+  await page
+    .getByRole("button", { name: "Confirm receipt & add people" })
+    .click();
+  for (const name of ["Alex", "Sam"]) {
+    await page.getByLabel("Person’s name").fill(name);
+    await page.getByRole("button", { name: "Add person", exact: true }).click();
+  }
+  await page.getByRole("button", { name: "Let’s share it" }).click();
+  await page
+    .getByRole("button", { name: "Share all equally", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Finalize split", exact: true })
+    .click();
+  const amounts = await Promise.all(
+    [0, 1].map((index) =>
+      page.getByTestId(`person-total-${index}`).textContent(),
+    ),
+  );
+  expect(
+    amounts.reduce(
+      (sum, amount) => sum + Number(amount?.replace(/[^0-9]/g, "")),
+      0,
+    ),
+  ).toBe(17678);
+  const download = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Download summary" }).click();
+  const summary = await readFile((await (await download).path())!, "utf8");
+  expect(summary).toContain("Receipt total: £176.78");
+  expect(summary).toContain("Allocated: £176.78");
+  expect(summary).toContain(`Alex (person 1): ${amounts[0]}`);
+  expect(summary).toContain(`Sam (person 2): ${amounts[1]}`);
+});
+
 test("a failed scan keeps the photos and updates the allowance without retrying", async ({
   page,
 }) => {
@@ -234,12 +295,12 @@ test("a failed scan keeps the photos and updates the allowance without retrying"
   await consent(page).check();
   await scan(page).click();
   await expect(page.getByRole("alert")).toContainText(
-    "OpenAI rate limit reached.",
+    "OpenAI rate limit reached. One app attempt was used.",
   );
   await expect(
-    page.getByText("The app’s OpenAI scan allowance is used up.", {
-      exact: true,
-    }),
+    page
+      .getByRole("status")
+      .filter({ hasText: "The app’s OpenAI scan allowance is used up." }),
   ).toBeVisible();
   await expect(consent(page)).not.toBeChecked();
   await expect(scan(page)).toBeDisabled();
@@ -251,4 +312,54 @@ test("a failed scan keeps the photos and updates the allowance without retrying"
   await expect(
     page.getByRole("heading", { name: "Your receipt." }),
   ).toBeVisible();
+});
+
+test("leaving during a scan preserves the prior draft and never replays the upload", async ({
+  page,
+}) => {
+  await stubOpenAi(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the Costco demo" }).click();
+  await expect(page.getByText("Draft saved on this device")).toBeVisible();
+  await page.getByRole("link", { name: "Gather home" }).click();
+  await uploadPhotos(page, 1);
+  let release!: () => void;
+  const held = new Promise<void>((done) => {
+    release = done;
+  });
+  let submissions = 0;
+  await page.route("**/api/receipts/openai", async (route) => {
+    submissions++;
+    await held;
+    await route.fulfill({ json: { receipt: aiCostcoDraft() } }).catch(() => {});
+  });
+  await consent(page).check();
+  page.once("dialog", (dialog) => dialog.accept());
+  const sent = page.waitForRequest(
+    (request) =>
+      request.method() === "POST" &&
+      request.url().endsWith("/api/receipts/openai"),
+  );
+  await scan(page).click();
+  await sent;
+  try {
+    // Exercise the close/navigation event without losing the test's tab.
+    await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await expect(page.getByRole("alert")).toContainText(
+      "Scan cancelled. If the request reached the server",
+    );
+    await expect(page.locator(".selected-image")).toHaveCount(1);
+    await expect(consent(page)).not.toBeChecked();
+    await expect(scan(page)).toBeDisabled();
+  } finally {
+    release();
+  }
+  await page.reload();
+  await expect(page.locator(".selected-image")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "2 Review" })).toBeEnabled();
+  await page.getByRole("button", { name: "2 Review" }).click();
+  const draft = page.getByRole("region", { name: "Digital receipt" });
+  await expect(draft.getByRole("heading", { name: "Costco" })).toBeVisible();
+  await expect(draft).toContainText("£176.78");
+  expect(submissions).toBe(1);
 });

@@ -209,7 +209,18 @@ export function createPhoneHandler({
       if (!token || !sessions.has(token))
         return pathname === "/" && req.method === "GET"
           ? showLogin(res)
-          : send(res, 401, "Enter the access code on the home page.");
+          : pathname.startsWith("/api/receipts/")
+            ? send(
+                res,
+                401,
+                JSON.stringify({
+                  error:
+                    "Your phone preview session ended. Reopen Gather to enter the access code again.",
+                  attemptUsed: false,
+                }),
+                { "content-type": "application/json" },
+              )
+            : send(res, 401, "Enter the access code on the home page.");
       if (pathname.startsWith("/api/receipts/")) {
         if (
           (req.method === "GET" &&

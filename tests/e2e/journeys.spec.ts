@@ -371,13 +371,29 @@ test("privacy dialog, keyboard escape, reset and responsive layout", async ({
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByRole("button", { name: "Privacy first", exact: false })
-    .click();
-  await expect(page.getByRole("dialog")).toContainText(
-    "Gather sends the selected photos or rendered PDF pages to OpenAI",
+  const privacy = page.getByRole("button", {
+    name: "Privacy Policy",
+    exact: true,
+  });
+  await privacy.click();
+  await expect(
+    page.getByRole("dialog", { name: "Privacy Policy" }),
+  ).toContainText(
+    "Gather sends the selected photos or rendered PDF pages as JPEG sections",
   );
+  const privacyAudit = await new AxeBuilder({ page })
+    .include("dialog[open]")
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+    .analyze();
+  expect(privacyAudit.violations).toEqual([]);
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await expect(privacy).toBeFocused();
+  await page.getByRole("button", { name: "Beta Terms", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Beta Terms" })).toContainText(
+    "Check the items, quantities, discounts, VAT and final split",
+  );
+  await page.getByRole("button", { name: "Close dialog", exact: true }).click();
   await expect(page.getByRole("dialog")).not.toBeVisible();
   expect(
     await page.evaluate(
@@ -393,17 +409,13 @@ test("privacy dialog, keyboard escape, reset and responsive layout", async ({
     ),
   ).toBe(true);
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Delete / reset receipt" }).click();
+  await page.getByRole("button", { name: "Clear local data" }).click();
   await expect(
     page.getByRole("heading", { name: "Big shop. Little maths." }),
   ).toBeVisible();
   expect(
-    await page.evaluate(
-      () =>
-        JSON.parse(localStorage.getItem("gather.receipt.v1")!).receipt.items
-          .length,
-    ),
-  ).toBe(0);
+    await page.evaluate(() => localStorage.getItem("gather.receipt.v1")),
+  ).toBeNull();
 });
 test("main screens pass automated WCAG A/AA checks", async ({ page }) => {
   await page.goto("/");

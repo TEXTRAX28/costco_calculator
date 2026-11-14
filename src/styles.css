@@ -684,6 +684,7 @@ summary::marker {
 }
 .site-footer {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
@@ -699,7 +700,26 @@ summary::marker {
   align-items: center;
 }
 .site-footer .text-button {
-  font-size: 10px;
+  font-size: 13px;
+  min-height: 44px;
+}
+.install-help {
+  max-width: 30rem;
+  font-size: 13px;
+}
+.install-help summary {
+  cursor: pointer;
+  font-weight: 600;
+  line-height: 44px;
+}
+.install-help p {
+  margin: 0;
+}
+.inline-link {
+  padding: 0;
+  font: inherit;
+  color: var(--green);
+  text-decoration: underline;
 }
 .capture-guidance {
   margin: 20px 0;
@@ -1968,20 +1988,23 @@ dialog::backdrop {
   right: 12px;
   top: 10px;
 }
-.privacy-dialog {
-  padding-top: 10px;
+.legal-notice {
+  padding-top: 14px;
 }
-.privacy-dialog > svg {
-  color: var(--green);
-  margin-bottom: 17px;
-}
-.privacy-dialog h2,
+.legal-notice h2,
 .image-dialog h2 {
   font-size: 30px;
   font-family: Georgia, serif;
   font-weight: 400;
 }
-.privacy-dialog p,
+.legal-notice h3 {
+  font-size: 16px;
+  margin: 22px 0 4px;
+}
+.legal-notice p {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
 .image-dialog p {
   font-size: 13px;
   color: var(--muted);
@@ -2665,13 +2688,20 @@ textarea[aria-invalid="true"] {
     padding-bottom: calc(20px + env(safe-area-inset-bottom));
     margin-top: 30px;
   }
-  .site-footer > span:nth-child(2) {
+  .site-footer > span {
     width: 100%;
     justify-content: center;
     order: 3;
   }
   dialog {
     padding: 30px 20px;
+  }
+}
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
   }
 }
 /* Phone controls stay readable and usable by touch throughout the workflow. */
