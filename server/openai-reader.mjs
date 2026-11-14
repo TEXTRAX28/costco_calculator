@@ -113,7 +113,7 @@ export function prepareOpenAiRequest(input) {
   if (estimateUsd > OPENAI_ESTIMATE_GUARD_USD)
     throw new OpenAiError(
       413,
-      "These sections exceed the US$0.60 scan estimate limit. Crop the photos or choose fewer sections.",
+      "These receipt sections are too large to scan together. Use tighter crops or scan fewer photos or pages at once.",
     );
   const serialized = JSON.stringify(body);
   if (Buffer.byteLength(serialized) > MAX_AI_BODY_BYTES)

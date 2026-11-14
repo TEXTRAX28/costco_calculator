@@ -16,6 +16,7 @@ import { createReceiptApi } from "../server/receipt-api.mjs";
 import {
   openaiRequestSchema,
   openaiStatusSchema,
+  OPENAI_ESTIMATE_GUARD_USD,
 } from "../src/lib/openai-schema.mjs";
 import { receiptFromOpenAi } from "../src/lib/openai-draft";
 import { aiCostcoDraft } from "./fixtures/ai-receipt";
@@ -106,6 +107,7 @@ describe("OpenAI receipt reader; offline transports only", () => {
       configured: false,
       remaining: 0,
       availability: "missing-allowance",
+      estimateGuardUsd: 3,
     });
     await expect(client.model.extract(panels)).rejects.toMatchObject({
       status: 503,
@@ -153,7 +155,7 @@ describe("OpenAI receipt reader; offline transports only", () => {
       })),
     );
     expect(prepared.photos).toEqual(new Set([1, 2]));
-    expect(prepared.estimateUsd).toBeLessThanOrEqual(0.6);
+    expect(prepared.estimateUsd).toBeLessThanOrEqual(OPENAI_ESTIMATE_GUARD_USD);
   });
   it("sends once to the fixed endpoint and preserves literal money through the current converter", async () => {
     const client = await reader();
@@ -220,9 +222,8 @@ describe("OpenAI receipt reader; offline transports only", () => {
     expect(client.upstream).not.toHaveBeenCalled();
     expect((await client.model.getStatus()).remaining).toBe(1);
   });
-  it("refuses an over-budget synthetic image header before consuming an attempt", async () => {
+  it("accepts larger sections under US$3 and rejects an over-budget batch before consuming an attempt", async () => {
     // Deliberately altered metadata, not a real image or a recognition fixture.
-    // Only the preflight header/cost check is exercised; no upload can occur.
     const large = Buffer.from(jpeg);
     let found = false;
     for (let i = 0; i < large.length - 9; i++) {
@@ -234,12 +235,24 @@ describe("OpenAI receipt reader; offline transports only", () => {
       }
     }
     expect(found).toBe(true);
+    const data = large.toString("base64");
+    const prepared = prepareOpenAiRequest(
+      panels.map((panel) => ({ ...panel, data })),
+    );
+    expect(prepared.estimateUsd).toBeGreaterThan(0.6);
+    expect(prepared.estimateUsd).toBeLessThanOrEqual(3);
+
+    const largeBatch = Array.from({ length: 24 }, (_, index) => ({
+      photo: Math.floor(index / 2) + 1,
+      part: (index % 2) + 1,
+      data,
+    }));
     const client = await reader();
-    await expect(
-      client.model.extract(
-        panels.map((panel) => ({ ...panel, data: large.toString("base64") })),
-      ),
-    ).rejects.toMatchObject({ status: 413 });
+    await expect(client.model.extract(largeBatch)).rejects.toMatchObject({
+      status: 413,
+      message:
+        "These receipt sections are too large to scan together. Use tighter crops or scan fewer photos or pages at once.",
+    });
     expect(client.upstream).not.toHaveBeenCalled();
     expect((await client.model.getStatus()).remaining).toBe(1);
   });

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { extractWithOpenAi, openaiConfiguration } from "../src/lib/openai";
+import { OPENAI_ESTIMATE_GUARD_USD } from "../src/lib/openai-schema.mjs";
 import { aiCostcoDraft } from "./fixtures/ai-receipt";
 import type { ReceiptImage } from "../src/lib/images";
 
@@ -27,7 +28,7 @@ describe("OpenAI client contract with fake transport", () => {
             model: "gpt-6-astra",
             configured: false,
             remaining: 0,
-            estimateGuardUsd: 0.6,
+            estimateGuardUsd: OPENAI_ESTIMATE_GUARD_USD,
             availability: "missing-key",
           }),
         ),

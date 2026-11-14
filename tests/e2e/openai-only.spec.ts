@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { resolve } from "node:path";
 import { prepareOpenAiRequest } from "../../server/openai-reader.mjs";
+import { OPENAI_ESTIMATE_GUARD_USD } from "../../src/lib/openai-schema.mjs";
 
 const scan = (page: Page) =>
   page.getByRole("button", {
@@ -12,11 +13,11 @@ const consent = (page: Page) =>
     name: /^Send these receipt sections to OpenAI/,
   });
 
-async function uploadPhotos(page: Page, count: number) {
-  const photo = await page.evaluate(() => {
+async function uploadPhotos(page: Page, count: number, height = 850) {
+  const photo = await page.evaluate((height) => {
     const canvas = document.createElement("canvas");
     canvas.width = 700;
-    canvas.height = 850;
+    canvas.height = height;
     const context = canvas.getContext("2d")!;
     context.fillStyle = "white";
     context.fillRect(0, 0, canvas.width, canvas.height);
@@ -26,7 +27,7 @@ async function uploadPhotos(page: Page, count: number) {
     context.fillText("2 Ramen   18.80   37.20", 32, 160);
     context.fillText("TOTAL GBP 37.20", 32, 240);
     return canvas.toDataURL("image/png").split(",")[1];
-  });
+  }, height);
   await page.getByLabel("Upload receipt images").setInputFiles(
     Array.from({ length: count }, (_, index) => ({
       name: `test-receipt-${index + 1}.png`,
@@ -48,7 +49,7 @@ async function stubOpenAi(page: Page, fails = false) {
         model: "gpt-6-astra",
         configured: remaining > 0,
         remaining,
-        estimateGuardUsd: 0.6,
+        estimateGuardUsd: OPENAI_ESTIMATE_GUARD_USD,
         availability: remaining ? "ready" : "exhausted",
       },
     }),
@@ -112,13 +113,20 @@ async function stubOpenAi(page: Page, fails = false) {
   return requests;
 }
 
-test("only OpenAI is offered, with a disabled scan when the server has no key", async ({
+test("shows the tall photo’s section count and disables OpenAI scanning without a key", async ({
   page,
   request,
 }) => {
   await page.goto("/");
-  await uploadPhotos(page, 1);
-  await expect(page.getByRole("group", { name: "OpenAI scan" })).toBeVisible();
+  await uploadPhotos(page, 1, 2000);
+  await expect(
+    page.getByText("1 of 12 photos or PDF pages · 2 of 24 scan sections", {
+      exact: true,
+    }),
+  ).toBeVisible();
+  const openaiScan = page.getByRole("group", { name: "OpenAI scan" });
+  await expect(openaiScan).toBeVisible();
+  await expect(openaiScan).not.toContainText("US$");
   await expect(
     page.getByRole("button", { name: /On-device scan|Assisted scan/ }),
   ).toHaveCount(0);
@@ -196,6 +204,11 @@ test("a text-bearing PDF sends its rendered pages through the OpenAI scan", asyn
     .getByLabel("Upload receipt images")
     .setInputFiles(resolve("tests/fixtures/pdfs/digital-two-page.pdf"));
   await expect(page.locator(".selected-image")).toHaveCount(2);
+  await expect(
+    page.getByText("2 of 12 photos or PDF pages · 2 of 24 scan sections", {
+      exact: true,
+    }),
+  ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Read PDF text on this device" }),
   ).toHaveCount(0);

@@ -20,7 +20,7 @@ const requestPanelsSchema = z
   );
 
 export const OPENAI_MODEL = "gpt-6-astra";
-export const OPENAI_ESTIMATE_GUARD_USD = 0.6;
+export const OPENAI_ESTIMATE_GUARD_USD = 3;
 export const openaiRequestSchema = z.strictObject({
   consent: z.literal(true),
   useCredits: z.literal(true),

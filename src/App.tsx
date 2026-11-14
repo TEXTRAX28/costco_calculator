@@ -266,6 +266,10 @@ function SectionIntro({
   );
 }
 
+function readingSectionCount(images: ReceiptImage[]) {
+  return images.reduce((count, image) => count + readingBlobs(image).length, 0);
+}
+
 export default function App() {
   const initial = useMemo(() => {
     try {
@@ -284,6 +288,7 @@ export default function App() {
   const [saveError, setSaveError] = useState("");
   const storageConflict = useRef(false);
   const [images, setImages] = useState<ReceiptImage[]>([]);
+  const scanSections = readingSectionCount(images);
   const imageRef = useRef<ReceiptImage[]>([]);
   const [imageError, setImageError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -550,14 +555,9 @@ export default function App() {
           })),
         );
         controller.current.signal.throwIfAborted();
-        if (
-          [...images, ...prepared].reduce(
-            (sum, image) => sum + readingBlobs(image).length,
-            0,
-          ) > MAX_READING_PANELS
-        )
+        if (scanSections + readingSectionCount(prepared) > MAX_READING_PANELS)
           throw new Error(
-            "This receipt has more than 24 detail sections. Import fewer pages or crop the images first.",
+            `This receipt has more than ${MAX_READING_PANELS} scan sections. Use tighter crops or scan fewer photos or pages at once.`,
           );
         if (
           [...images, ...prepared].reduce(
@@ -913,8 +913,8 @@ export default function App() {
                   <p>
                     Drop your receipt here, or choose photos or a PDF.
                     <br />
-                    Long receipt? Add up to {MAX_RECEIPT_IMAGES} overlapping
-                    photos.
+                    Choose up to {MAX_RECEIPT_IMAGES} photos or PDF pages per
+                    receipt.
                   </p>
                   <div className="upload-actions">
                     <button
@@ -970,8 +970,7 @@ export default function App() {
                   <p>
                     Keep the text sharp and the receipt flat. You can add photos
                     one at a time, crop the background and change their order
-                    below. A tall image is read in detail sections
-                    automatically.
+                    below. Tall photos can use more than one scan section.
                   </p>
                 </div>
                 {images.length > 0 && (
@@ -1041,10 +1040,9 @@ export default function App() {
                   </div>
                 )}
                 {images.length > 0 && (
-                  <p className="hint">
-                    {images.length} of {MAX_RECEIPT_IMAGES} images or pages ·
-                    Keep them in top-to-bottom order. Crop away the background
-                    for a clearer result.
+                  <p className="hint" role="status">
+                    {images.length} of {MAX_RECEIPT_IMAGES} photos or PDF pages
+                    · {scanSections} of {MAX_READING_PANELS} scan sections
                   </p>
                 )}
                 <PhotoGuidance images={images} />
@@ -1095,10 +1093,6 @@ export default function App() {
                               : openaiConfig?.availability === "exhausted"
                                 ? "The app’s OpenAI scan allowance is used up."
                                 : "OpenAI scanning is unavailable. Check the local server and its allowance storage."}
-                    </p>
-                    <p className="hint">
-                      The app accepts scans estimated at US$0.60 or less. OpenAI
-                      bills actual usage.
                     </p>
                     <p className="hint">
                       Crop out membership and payment details. OpenAI API
@@ -2624,14 +2618,9 @@ export default function App() {
               const next = images.map((image) =>
                 image.id === cropped.id ? cropped : image,
               );
-              if (
-                next.reduce(
-                  (count, image) => count + readingBlobs(image).length,
-                  0,
-                ) > MAX_READING_PANELS
-              ) {
+              if (readingSectionCount(next) > MAX_READING_PANELS) {
                 setImageError(
-                  "This correction creates more than 24 detail sections. Use fewer photos or trim the receipt first.",
+                  `This correction creates more than ${MAX_READING_PANELS} scan sections. Use fewer photos or trim the receipt first.`,
                 );
                 setCropTarget(null);
                 return;
