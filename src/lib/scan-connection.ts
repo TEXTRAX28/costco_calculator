@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { openaiConfiguration, ScanAccessError } from "./openai";
 
-export function useScanConnection() {
+export function useScanConnection(enabled = true) {
   const pending = useRef<AbortController | null>(null);
   const [online, setOnline] = useState(() => navigator.onLine);
-  const [checking, setChecking] = useState(online);
+  const [checking, setChecking] = useState(enabled && online);
   const [signIn, setSignIn] = useState<ScanAccessError["recovery"] | null>(
     null,
   );
@@ -17,8 +17,8 @@ export function useScanConnection() {
     pending.current = null;
     const available = navigator.onLine;
     setOnline(available);
-    setChecking(available);
-    if (!available) {
+    setChecking(enabled && available);
+    if (!enabled || !available) {
       setConfig(null);
       setSignIn(null);
       return;
@@ -42,7 +42,7 @@ export function useScanConnection() {
       if (!request.signal.aborted) setChecking(false);
       if (pending.current === request) pending.current = null;
     }
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     const connectivity = () => void check();

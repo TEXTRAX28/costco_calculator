@@ -10,6 +10,9 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
+import { Capacitor } from "@capacitor/core";
+import { Clipboard } from "@capacitor/clipboard";
+import { Share } from "@capacitor/share";
 import {
   firstReceiptIssue,
   focusValidationIssue,
@@ -32,6 +35,7 @@ import {
   Plus,
   ReceiptText,
   ScanLine,
+  Share2,
   ShieldCheck,
   ShoppingBasket,
   Sparkles,
@@ -275,6 +279,7 @@ function readingSectionCount(images: ReceiptImage[]) {
 }
 
 export default function App() {
+  const nativeApp = Capacitor.isNativePlatform();
   const initial = useMemo(() => {
     try {
       const draft = loadDraft(localStorage);
@@ -313,14 +318,16 @@ export default function App() {
     signIn,
     config: openaiConfig,
     check: checkScanConnection,
-  } = useScanConnection();
+  } = useScanConnection(!nativeApp);
   const scanAvailable = online && openaiConfig?.configured && !checkingAi;
   const canScan = aiConsented && scanAvailable;
-  const connectionNotice = !online
-    ? "You’re offline. You can review, split or enter a receipt manually. Reconnect to scan."
-    : state.step !== "scan" && !checkingAi && !signIn && !openaiConfig
-      ? "Scanning is unavailable. You can keep editing and splitting this receipt."
-      : null;
+  const connectionNotice = nativeApp
+    ? null
+    : !online
+      ? "You’re offline. You can review, split or enter a receipt manually. Reconnect to scan."
+      : state.step !== "scan" && !checkingAi && !signIn && !openaiConfig
+        ? "Scanning is unavailable. You can keep editing and splitting this receipt."
+        : null;
   const controller = useRef<AbortController | null>(null);
   const [rawText, setRawText] = useState("");
   const [legalPage, setLegalPage] = useState<LegalPage | null>(null);
@@ -736,12 +743,29 @@ export default function App() {
   }
   async function copySummary() {
     try {
-      await navigator.clipboard.writeText(readableSummary(state));
+      const summary = readableSummary(state);
+      if (nativeApp) await Clipboard.write({ string: summary });
+      else await navigator.clipboard.writeText(summary);
       setNotice("Summary copied. Ready for the group chat.");
     } catch {
       setNotice(
-        "Clipboard access is unavailable. Use Download summary to save the same text.",
+        nativeApp
+          ? "Clipboard access is unavailable. Use Share summary to send the same text."
+          : "Clipboard access is unavailable. Use Download summary to save the same text.",
       );
+    }
+  }
+  async function shareSummary() {
+    try {
+      await Share.share({
+        title: "Gather split",
+        text: readableSummary(state),
+      });
+    } catch (error) {
+      if (!(error instanceof Error && /cancel/i.test(error.message)))
+        setNotice(
+          "Sharing couldn’t open. Copy the summary and share it from another app.",
+        );
     }
   }
   function downloadSummary() {
@@ -1133,104 +1157,115 @@ export default function App() {
                     {imageError}
                   </p>
                 )}
-                <fieldset className="reader-choice" disabled={busy}>
-                  <legend>OpenAI scan</legend>
-                  <div className="ai-reader-info">
-                    <p>
-                      Gather sends JPEG sections from your receipt photos or PDF
-                      pages to OpenAI to prepare an editable draft.
-                    </p>
-                    <p
-                      className="hint"
-                      role="status"
-                      tabIndex={-1}
-                      ref={scanAvailabilityStatus}
-                    >
-                      {scanAvailability}
-                    </p>
-                    {signIn === "pair" && (
-                      <PreviewPairing
-                        onPaired={() => {
-                          scanAvailabilityStatus.current?.focus({
-                            preventScroll: true,
-                          });
-                          void checkScanConnection();
-                        }}
-                      />
-                    )}
-                    {signIn === "gateway" && (
-                      <a
-                        className="text-button"
-                        href="/"
-                        target="_blank"
-                        rel="noopener"
-                      >
-                        Sign in in a new tab
-                      </a>
-                    )}
-                    {online && !checkingAi && !openaiConfig?.configured && (
-                      <button
-                        type="button"
-                        className="text-button"
-                        onClick={() => void checkScanConnection()}
-                      >
-                        Check scan connection
-                      </button>
-                    )}
-                    <p className="hint">
-                      Crop out membership and payment details. OpenAI may retain
-                      scan content for safety monitoring.{" "}
-                      <button
-                        type="button"
-                        className="inline-link"
-                        onClick={(event) =>
-                          openLegal("privacy", event.currentTarget)
-                        }
-                      >
-                        Read the Privacy Policy
-                      </button>
-                    </p>
-                    <label className="check-line">
-                      <input
-                        type="checkbox"
-                        checked={aiConsented}
-                        disabled={!scanAvailable}
-                        onChange={(event) =>
-                          setAiConsented(event.target.checked)
-                        }
-                      />
-                      Send these receipt sections to OpenAI and use API credits
-                      for this scan.
-                    </label>
-                  </div>
-                </fieldset>
-                {(images.length > 0 || importing) && (
-                  <div className="scan-controls">
-                    <button
-                      className="button button-primary full-width"
-                      disabled={busy || !canScan}
-                      onClick={() => void scan()}
-                    >
-                      {busy ? (
-                        <LoaderCircle className="spin" size={18} />
-                      ) : (
-                        <ScanLine size={18} />
-                      )}
-                      {busy
-                        ? scanStatus || "Preparing images…"
-                        : "Read receipt with OpenAI credits"}
-                      {!busy && <ArrowRight size={17} />}
-                    </button>
-                    {busy && controller.current && (
-                      <button
-                        className="text-button"
-                        onClick={() => controller.current?.abort()}
-                      >
-                        {importing ? "Cancel import" : "Cancel scan"}
-                      </button>
-                    )}
-                  </div>
+                {nativeApp && (
+                  <p className="hint">
+                    This mobile build supports manual entry, pasted text and the
+                    Costco demo. OpenAI scanning needs a hosted connection.
+                  </p>
                 )}
+                {!nativeApp && (
+                  <fieldset className="reader-choice" disabled={busy}>
+                    <legend>OpenAI scan</legend>
+                    <div className="ai-reader-info">
+                      <p>
+                        Gather sends JPEG sections from your receipt photos or
+                        PDF pages to OpenAI to prepare an editable draft.
+                      </p>
+                      <p
+                        className="hint"
+                        role="status"
+                        tabIndex={-1}
+                        ref={scanAvailabilityStatus}
+                      >
+                        {scanAvailability}
+                      </p>
+                      {signIn === "pair" && (
+                        <PreviewPairing
+                          onPaired={() => {
+                            scanAvailabilityStatus.current?.focus({
+                              preventScroll: true,
+                            });
+                            void checkScanConnection();
+                          }}
+                        />
+                      )}
+                      {signIn === "gateway" && (
+                        <a
+                          className="text-button"
+                          href="/"
+                          target="_blank"
+                          rel="noopener"
+                        >
+                          Sign in in a new tab
+                        </a>
+                      )}
+                      {online && !checkingAi && !openaiConfig?.configured && (
+                        <button
+                          type="button"
+                          className="text-button"
+                          onClick={() => void checkScanConnection()}
+                        >
+                          Check scan connection
+                        </button>
+                      )}
+                      <p className="hint">
+                        Crop out membership and payment details. OpenAI may
+                        retain scan content for safety monitoring.{" "}
+                        <button
+                          type="button"
+                          className="inline-link"
+                          onClick={(event) =>
+                            openLegal("privacy", event.currentTarget)
+                          }
+                        >
+                          Read the Privacy Policy
+                        </button>
+                      </p>
+                      <label className="check-line">
+                        <input
+                          type="checkbox"
+                          checked={aiConsented}
+                          disabled={!scanAvailable}
+                          onChange={(event) =>
+                            setAiConsented(event.target.checked)
+                          }
+                        />
+                        Send these receipt sections to OpenAI and use API
+                        credits for this scan.
+                      </label>
+                    </div>
+                  </fieldset>
+                )}
+                {(images.length > 0 || importing) &&
+                  (!nativeApp || importing) && (
+                    <div className="scan-controls">
+                      {!nativeApp && (
+                        <button
+                          className="button button-primary full-width"
+                          disabled={busy || !canScan}
+                          onClick={() => void scan()}
+                        >
+                          {busy ? (
+                            <LoaderCircle className="spin" size={18} />
+                          ) : (
+                            <ScanLine size={18} />
+                          )}
+                          {busy
+                            ? scanStatus || "Preparing images…"
+                            : "Read receipt with OpenAI credits"}
+                          {!busy && <ArrowRight size={17} />}
+                        </button>
+                      )}
+                      {busy && controller.current && (
+                        <button
+                          className="text-button"
+                          onClick={() => controller.current?.abort()}
+                        >
+                          {importing ? "Cancel import" : "Cancel scan"}
+                        </button>
+                      )}
+                    </div>
+                  )}
                 <span className="visually-hidden" role="status">
                   {busy ? scanStatus : ""}
                 </span>
@@ -2585,10 +2620,18 @@ export default function App() {
                         </button>
                         <button
                           className="button button-outline"
-                          onClick={downloadSummary}
+                          onClick={
+                            nativeApp
+                              ? () => void shareSummary()
+                              : downloadSummary
+                          }
                         >
-                          <Download size={17} />
-                          Download summary
+                          {nativeApp ? (
+                            <Share2 size={17} />
+                          ) : (
+                            <Download size={17} />
+                          )}
+                          {nativeApp ? "Share summary" : "Download summary"}
                         </button>
                       </div>
                       <details className="rounding-explainer">
@@ -2663,14 +2706,16 @@ export default function App() {
             <RotateCcw size={14} />
             Clear local data
           </button>
-          <details className="install-help">
-            <summary>Install Gather</summary>
-            <p>
-              On iPhone, open this page in Safari and use Share → Add to Home
-              Screen. If shown, turn on Open as Web App. In other browsers, use
-              the browser’s install option when available.
-            </p>
-          </details>
+          {!nativeApp && (
+            <details className="install-help">
+              <summary>Install Gather</summary>
+              <p>
+                On iPhone, open this page in Safari and use Share → Add to Home
+                Screen. If shown, turn on Open as Web App. In other browsers,
+                use the browser’s install option when available.
+              </p>
+            </details>
+          )}
         </footer>
       </main>
       <dialog

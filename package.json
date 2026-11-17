@@ -11,6 +11,8 @@
     "dev": "vite --host 127.0.0.1 --port 5175 --configLoader native",
     "prebuild": "npm run prepare:pdf",
     "build": "npm run typecheck && vite build --configLoader native && node scripts/build-pwa.mjs",
+    "mobile:sync:android": "npm run build && cap sync android",
+    "mobile:sync:ios": "npm run build && cap sync ios",
     "start": "node scripts/start.mjs",
     "preview": "npm start",
     "preview:phone": "node scripts/phone-preview.mjs",
@@ -24,6 +26,9 @@
     "prepare:pdf": "node scripts/prepare-pdf.mjs"
   },
   "dependencies": {
+    "@capacitor/clipboard": "^8.0.1",
+    "@capacitor/core": "^8.6.2",
+    "@capacitor/share": "^8.0.3",
     "lucide-react": "^0.468.0",
     "pdfjs-dist": "6.4.299",
     "react": "^19.0.0",
@@ -32,6 +37,9 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.0",
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/ios": "^8.6.2",
     "@playwright/test": "^1.51.0",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

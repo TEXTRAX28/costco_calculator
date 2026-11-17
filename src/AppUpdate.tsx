@@ -1,10 +1,12 @@
 import { useEffect, useState } from "react";
+import { Capacitor } from "@capacitor/core";
 
 export default function AppUpdate() {
   const [waiting, setWaiting] = useState(false);
 
   useEffect(() => {
     if (
+      Capacitor.isNativePlatform() ||
       !import.meta.env.PROD ||
       !window.isSecureContext ||
       !navigator.serviceWorker

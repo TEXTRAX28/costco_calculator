@@ -16,3 +16,13 @@ HANDOFF.md
 scripts/update-graph.py
 # Keep the source index bounded; indexed tests describe their fixture behaviour.
 tests/fixtures/
+# Copied web bundles, generated mobile resources, and SDK build products.
+android/app/build/
+android/app/src/main/assets/
+android/app/src/main/res/
+android/.gradle/
+android/capacitor-cordova-android-plugins/
+ios/App/App/public/
+ios/App/App/Assets.xcassets/
+ios/App/CapApp-SPM/README.md
+ios/DerivedData/

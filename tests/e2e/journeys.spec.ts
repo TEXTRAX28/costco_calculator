@@ -180,6 +180,90 @@ test("quantity 1/3/5 is rejected and corrected to valid 1/3/4", async ({
     page.getByRole("heading", { name: "Every penny has a home." }),
   ).toBeVisible();
 });
+test("the bundled mobile workspace works offline and uses the native clipboard and share sheet", async ({
+  browserName,
+  page,
+  context,
+}) => {
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/api/") || path === "/sw.js") requests.push(path);
+  });
+  await page.addInitScript((isIOS) => {
+    const nativeCalls: {
+      plugin: string;
+      method: string;
+      options: unknown;
+    }[] = [];
+    Object.assign(window, {
+      ...(isIOS
+        ? { webkit: { messageHandlers: { bridge: {} } } }
+        : { androidBridge: {} }),
+      Capacitor: {
+        PluginHeaders: [
+          {
+            name: "Clipboard",
+            methods: [{ name: "write", rtype: "promise" }],
+          },
+          { name: "Share", methods: [{ name: "share", rtype: "promise" }] },
+        ],
+        nativePromise(plugin: string, method: string, options: unknown) {
+          nativeCalls.push({ plugin, method, options });
+          return Promise.resolve({});
+        },
+      },
+      gatherNativeCalls: nativeCalls,
+    });
+  }, browserName === "webkit");
+  await page.goto("/");
+  await expect(
+    page.getByText(/This mobile build supports manual entry/),
+  ).toBeVisible();
+  await expect(page.getByText("Install Gather", { exact: true })).toHaveCount(
+    0,
+  );
+  await context.setOffline(true);
+  await page.getByRole("button", { name: "Enter manually" }).click();
+  await page
+    .getByRole("textbox", { name: "Merchant", exact: true })
+    .fill("Little Market");
+  await page
+    .getByRole("textbox", { name: "Printed total", exact: true })
+    .fill("10.00");
+  await page
+    .getByRole("textbox", { name: "Item 1 description", exact: true })
+    .fill("Shared groceries");
+  await page
+    .getByRole("textbox", { name: "Item 1 line price", exact: true })
+    .fill("10.00");
+  await page
+    .getByRole("button", { name: "Confirm receipt & add people" })
+    .click();
+  await people(page);
+  await selectAll(page);
+  await page
+    .getByRole("button", { name: "Finalize split", exact: true })
+    .click();
+  await expect(page.getByTestId("person-total-0")).toHaveText("£3.34");
+  await page.getByRole("button", { name: "Copy summary", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Share summary", exact: true })
+    .click();
+  const summary = expect.stringContaining("£3.34");
+  await expect
+    .poll(() => page.evaluate(() => Reflect.get(window, "gatherNativeCalls")))
+    .toMatchObject([
+      { plugin: "Clipboard", method: "write", options: { string: summary } },
+      {
+        plugin: "Share",
+        method: "share",
+        options: { title: "Gather split", text: summary },
+      },
+    ]);
+  expect(requests).toEqual([]);
+});
+
 test("ratio and percentage share methods have distinct validation", async ({
   page,
 }) => {
