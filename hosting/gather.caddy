@@ -1,6 +1,13 @@
 (gather_options) {
 	admin off
 	persist_config off
+	log {
+		format filter {
+			request>uri delete
+			request>headers delete
+			resp_headers delete
+		}
+	}
 	servers {
 		timeouts {
 			read_header 10s
@@ -20,9 +27,25 @@
 		Strict-Transport-Security "max-age=31536000"
 		X-Content-Type-Options "nosniff"
 		X-Frame-Options "DENY"
-		Referrer-Policy "same-origin"
+		Referrer-Policy "no-referrer"
 		Permissions-Policy "camera=(self), microphone=(), geolocation=()"
 		-X-Powered-By
+	}
+
+	@accounts path /api/auth/* /api/account/*
+	handle @accounts {
+		request_body {
+			max_size 800000
+		}
+		reverse_proxy 127.0.0.1:4175 {
+			header_up Host 127.0.0.1:4175
+			header_up X-Gather-Client-IP {remote_host}
+			header_up -Authorization
+			header_up -Referer
+			header_up -X-Forwarded-For
+			header_up -X-Forwarded-Host
+			header_up -X-Forwarded-Proto
+		}
 	}
 
 	@scan {
@@ -42,6 +65,7 @@
 			header_up Origin http://127.0.0.1:4175
 			header_up -Authorization
 			header_up -Cookie
+			header_up -X-Gather-Client-IP
 			header_up -X-Forwarded-For
 			header_up -X-Forwarded-Host
 			header_up -X-Forwarded-Proto
@@ -56,6 +80,7 @@
 			header_up Host 127.0.0.1:4175
 			header_up -Authorization
 			header_up -Cookie
+			header_up -X-Gather-Client-IP
 			header_up -X-Forwarded-For
 			header_up -X-Forwarded-Host
 			header_up -X-Forwarded-Proto

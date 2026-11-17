@@ -23,6 +23,7 @@ const mime = {
   ".woff2": "font/woff2",
 };
 const appFiles = new Set(["index.html", "manifest.webmanifest", "sw.js"]);
+const accountPages = new Set(["/auth", "/auth/action"]);
 const assetDirectories = new Set(["assets", "pdf-assets", "icons"]);
 
 export async function indexBuiltFiles(directory) {
@@ -50,7 +51,8 @@ export async function indexBuiltFiles(directory) {
 }
 
 export async function serveBuiltFile(req, res, pathname, routes) {
-  const path = pathname === "/" ? "/index.html" : pathname;
+  const accountPage = accountPages.has(pathname);
+  const path = pathname === "/" || accountPage ? "/index.html" : pathname;
   const file = routes.get(path);
   if (!file) return false;
   if (req.method !== "GET" && req.method !== "HEAD") {
@@ -68,9 +70,9 @@ export async function serveBuiltFile(req, res, pathname, routes) {
     "cache-control": "no-store",
     "x-content-type-options": "nosniff",
     "x-frame-options": "DENY",
-    "referrer-policy": "same-origin",
+    "referrer-policy": accountPage ? "no-referrer" : "same-origin",
     "permissions-policy": "camera=(self), microphone=(), geolocation=()",
-    ...(isAppShell ? { "x-gather-shell": "1" } : {}),
+    ...(isAppShell && !accountPage ? { "x-gather-shell": "1" } : {}),
   });
   if (req.method === "HEAD") res.end();
   else {

@@ -39,6 +39,28 @@ export default function LegalNotice({ page }: { page: LegalPage }) {
               OpenAI API data controls
             </a>
           </p>
+          <h3>Gather accounts</h3>
+          <p>
+            Accounts are optional. For email sign-in, Gather sends your email
+            address and password to Firebase Authentication, which manages
+            credentials and sends verification and reset emails. If you choose
+            Google sign-in, Google returns a verified account identifier and
+            email address to Gather.
+          </p>
+          <p>
+            Gather stores an account ID, the sign-in provider’s identifier, your
+            verified email address and server session records. An HTTP-only
+            cookie keeps you signed in. To limit abuse, Gather counts attempts
+            using keyed representations of network addresses and account
+            identifiers.
+          </p>
+          <p>
+            When you choose to save a receipt or a split group to your account,
+            Gather stores the receipt details, participant names or group
+            members and your saved split in its database. Photos, original PDFs
+            and raw receipt text stay off that saved copy. You can remove saved
+            entries in your account.
+          </p>
           <h3>Storage and access</h3>
           <p>
             Gather's app server processes uploads in memory. Its allowance
@@ -46,17 +68,18 @@ export default function LegalNotice({ page }: { page: LegalPage }) {
             across restarts. The host receives your IP address and request
             details to connect and protect the service. The private phone
             preview uses a session cookie that expires within eight hours. An
-            installed app can cache its program files for offline use. Receipt
-            drafts live in browser storage. The app cache holds program files
-            and icons.
+            installed app can cache its program files for offline use. The
+            current draft lives in browser storage. The app cache holds program
+            files and icons.
           </p>
           <h3>Clear your local data</h3>
           <p>
             Clear local data removes the current draft, names, shares, pasted
             text and imported photos from this browser. Close other Gather tabs
-            to discard their open copies. Exports, clipboard copies, server
-            allowance records and provider data are managed separately. Use your
-            browser settings to remove the app cache or session.
+            to discard their open copies. Saved account entries, exports,
+            clipboard copies, server allowance records and provider data are
+            managed separately. Use your browser settings to remove the app
+            cache or session.
           </p>
           <p>
             For privacy questions or requests about server or provider data,{" "}

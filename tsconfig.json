@@ -18,6 +18,7 @@
     "tests",
     "vite.config.ts",
     "playwright.config.ts",
+    "playwright.auth.config.ts",
     "playwright.webkit.config.ts"
   ]
 }

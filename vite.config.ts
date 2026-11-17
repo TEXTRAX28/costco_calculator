@@ -1,6 +1,7 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 import { createReceiptApi } from "./server/receipt-api.mjs";
+import { accountRuntime } from "./server/auth/runtime.mjs";
 import { privateFileDeny } from "./server/private-paths.mjs";
 import { openAiSettings } from "./server/openai-settings.mjs";
 
@@ -31,6 +32,9 @@ export default defineConfig({
     {
       name: "private-local-receipt-api",
       configureServer(server) {
+        const accounts = accountRuntime(server.config.root);
+        server.httpServer?.once("close", () => void accounts.close());
+        server.middlewares.use(accounts.api);
         server.middlewares.use(
           createReceiptApi(openAiSettings(server.config.root)),
         );

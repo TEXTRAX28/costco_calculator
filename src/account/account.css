@@ -1,0 +1,245 @@
+.account-shell {
+  min-height: 100dvh;
+}
+
+.account-header {
+  padding-inline: max(1rem, env(safe-area-inset-left));
+  gap: 0.75rem;
+}
+
+.account-header .account-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+}
+
+.account-main {
+  width: min(100% - 2rem, 31rem);
+  margin: clamp(1.5rem, 7vh, 4rem) auto 2rem;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.account-main-wide {
+  width: min(100% - 2rem, 61rem);
+}
+
+.account-card,
+.account-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 1.4rem;
+  padding: clamp(1.25rem, 5vw, 2.25rem);
+  box-shadow: 0 10px 40px rgb(41 47 40 / 5%);
+}
+
+.account-main h1 {
+  margin: 0 0 0.5rem;
+  font-size: clamp(1.8rem, 6.25vw, 2.5rem);
+  line-height: 1.16;
+  letter-spacing: -0.035em;
+}
+
+.account-lead,
+.account-empty {
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.account-fields {
+  display: grid;
+  gap: 0.95rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.account-form-content,
+.account-library {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+
+.account-form-content h1,
+.account-form-content p,
+.account-library-head p {
+  margin: 0;
+}
+
+.account-fields input {
+  min-width: 0;
+  min-height: 46px;
+  font-size: 1rem;
+}
+
+.account-main .button,
+.account-main .text-button,
+.account-legal summary {
+  min-height: 44px;
+}
+
+.account-password {
+  display: flex;
+  gap: 0.3rem;
+  align-items: center;
+  position: relative;
+}
+
+.account-password input {
+  width: 100%;
+  padding-inline-end: 5.3rem;
+}
+
+.account-password button {
+  position: absolute;
+  inset-inline-end: 0.35rem;
+  gap: 0.3rem;
+  min-width: 72px;
+  padding-inline: 0.35rem;
+  font-size: 0.88rem;
+}
+
+.account-submit {
+  margin-top: 0.2rem;
+}
+
+.account-error {
+  color: var(--danger);
+  overflow-wrap: anywhere;
+}
+
+p.account-error {
+  border-radius: 0.75rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--danger);
+  background: var(--warning-bg);
+}
+
+.account-fields [aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.account-form-links,
+.account-library-head,
+.saved-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+}
+
+.account-form-links button,
+.account-library > .text-button {
+  justify-self: start;
+  padding-inline: 0.15rem;
+}
+
+.account-library-head {
+  align-items: start;
+}
+
+.account-library-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.account-panel h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.9rem;
+  font-size: 1.18rem;
+}
+
+.saved-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.saved-list li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.45rem;
+  border-bottom: 1px solid var(--border);
+  padding-block: 0.25rem;
+  overflow-wrap: anywhere;
+}
+
+.saved-list time {
+  display: block;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.saved-actions {
+  justify-content: end;
+  gap: 0.25rem;
+}
+
+.saved-actions .text-button {
+  padding-inline: 0.4rem;
+}
+
+.account-remove {
+  color: var(--danger);
+}
+
+.account-legal {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: start;
+  margin-top: 1.25rem;
+  border-top: 1px solid var(--border);
+}
+
+.account-legal summary {
+  display: list-item;
+  align-content: center;
+  cursor: pointer;
+  color: var(--green);
+}
+
+.account-header :focus-visible,
+.account-main :focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+
+.account-spinner {
+  animation: account-spin 0.8s linear infinite;
+}
+
+@keyframes account-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .account-spinner {
+    animation: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .account-library-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 375px) {
+  .account-main {
+    width: calc(100% - 1.25rem);
+  }
+
+  .account-header .account-back {
+    font-size: 0.88rem;
+  }
+}

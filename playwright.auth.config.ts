@@ -1,0 +1,37 @@
+import { defineConfig, devices } from "@playwright/test";
+
+const baseURL = "https://127.0.0.1:4191";
+const channel = process.env.GATHER_TEST_CHROME === "1" ? "chrome" : undefined;
+
+export default defineConfig({
+  testDir: "./tests/auth/browser",
+  timeout: 45_000,
+  workers: 1,
+  reporter: "list",
+  outputDir: "qa-artifacts/auth-browser",
+  use: {
+    baseURL,
+    ignoreHTTPSErrors: true,
+    trace: "retain-on-failure",
+    serviceWorkers: "block",
+  },
+  projects: [
+    { name: "desktop", use: { ...devices["Desktop Chrome"], channel } },
+    {
+      name: "mobile",
+      use: {
+        ...devices["iPhone 13"],
+        defaultBrowserType: "chromium",
+        channel,
+        deviceScaleFactor: 1,
+      },
+    },
+    { name: "webkit-mobile", use: { ...devices["iPhone 13"] } },
+  ],
+  webServer: {
+    command: "node tests/auth/browser-server.mjs",
+    url: baseURL,
+    ignoreHTTPSErrors: true,
+    reuseExistingServer: false,
+  },
+});

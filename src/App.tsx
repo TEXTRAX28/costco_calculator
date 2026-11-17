@@ -1,6 +1,8 @@
 import {
   cloneElement,
   isValidElement,
+  lazy,
+  Suspense,
   useEffect,
   useId,
   useMemo,
@@ -41,6 +43,7 @@ import {
   CircleHelp,
   RotateCcw,
   AlertCircle,
+  UserRound,
 } from "lucide-react";
 import {
   currencies,
@@ -96,6 +99,12 @@ import RefundControl from "./RefundControl";
 import LegalNotice, { type LegalPage } from "./LegalNotice";
 import AppUpdate from "./AppUpdate";
 import PreviewPairing from "./PreviewPairing";
+import { useAccount } from "./account/use-account";
+
+const AccountPage = lazy(async () => ({
+  default: (await import("./account/AccountPage")).AccountPage,
+}));
+
 type Step = AppState["step"];
 const steps: { id: Step; title: string }[] = [
   { id: "scan", title: "Receipt" },
@@ -274,7 +283,13 @@ function readingSectionCount(images: ReceiptImage[]) {
   return images.reduce((count, image) => count + readingBlobs(image).length, 0);
 }
 
-export default function App() {
+export default function App({
+  accountRoute,
+}: {
+  accountRoute: Parameters<typeof useAccount>[0];
+}) {
+  const account = useAccount(accountRoute);
+  const accountTrigger = useRef<HTMLButtonElement>(null);
   const initial = useMemo(() => {
     try {
       const draft = loadDraft(localStorage);
@@ -858,6 +873,76 @@ export default function App() {
       )}
     </aside>
   );
+  if (account.route.view !== "workspace")
+    return (
+      <Suspense
+        fallback={
+          <main className="app-main">
+            <p role="status">Opening Gather account…</p>
+          </main>
+        }
+      >
+        <AccountPage
+          account={account}
+          draft={state}
+          keepWorkspaceOpen={Boolean(images.length || rawText || saveError)}
+          onReturn={() => {
+            account.go("/", true);
+            requestAnimationFrame(() => accountTrigger.current?.focus());
+          }}
+          onOpenReceipt={(draft) => {
+            if (
+              (state.receipt.items.length || images.length || rawText) &&
+              !window.confirm(
+                "Open this saved receipt and replace the current draft on this device?",
+              )
+            )
+              return;
+            images.forEach((image) => URL.revokeObjectURL(image.url));
+            setImages([]);
+            setRawText("");
+            setScanCurrency("");
+            setAiConsented(false);
+            setValidation(null);
+            setValidationAttempted(null);
+            setState(prepareSavedReceiptReview(draft));
+            setNotice("Opened a saved receipt.");
+            account.go("/", true);
+          }}
+          onUseGroup={(names) => {
+            const existing = new Set(
+              state.people.map(({ name }) => name.toLowerCase()),
+            );
+            const additions = names.filter((name) => {
+              const key = name.toLowerCase();
+              if (existing.has(key)) return false;
+              existing.add(key);
+              return true;
+            });
+            if (state.people.length + additions.length > 30) {
+              setNotice(
+                "This split already has too many people to add the whole group.",
+              );
+            } else {
+              setState((draft) => ({
+                ...draft,
+                people: [
+                  ...draft.people,
+                  ...additions.map((name) => ({ id: uid(), name })),
+                ],
+                finalizedStamp: "",
+              }));
+              setNotice(
+                additions.length
+                  ? "Added the group to this split."
+                  : "These people are already in the split.",
+              );
+            }
+            account.go("/", true);
+          }}
+        />
+      </Suspense>
+    );
   return (
     <>
       <a className="skip-link" href="#main">
@@ -879,6 +964,20 @@ export default function App() {
           gather<span className="brand-dot">.</span>
         </a>
         <nav aria-label="Help">
+          {account.status.availability === "ready" && (
+            <button
+              type="button"
+              className="text-button account-entry"
+              ref={accountTrigger}
+              disabled={busy || importing}
+              onClick={() =>
+                account.go(account.status.session ? "/?account=1" : "/auth")
+              }
+            >
+              <UserRound size={17} aria-hidden="true" />
+              {account.status.session ? "Account" : "Sign in"}
+            </button>
+          )}
           <button
             className="text-button"
             onClick={(event) => openLegal("privacy", event.currentTarget)}

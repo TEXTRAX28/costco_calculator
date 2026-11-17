@@ -34,6 +34,10 @@ Supported uploads are JPEG, PNG, still WebP and PDF, up to 12 MiB per file and 1
 
 Open the built app over trusted HTTPS. In Safari, use Share → Add to Home Screen and enable Open as Web App if the option appears. Other browsers can offer installation from their menu. After an online visit, the app shell can reopen offline for manual entry, review and splitting. Scanning needs a connection. When an update is ready, finish the receipt, close all Gather windows, then reopen it. [Apple’s iPhone guide](https://support.apple.com/guide/iphone/open-as-web-app-iphea86e5236/27/ios/27)
 
+## Accounts
+
+Guest use is available without account configuration. Optional accounts use Firebase Authentication and Gather's PostgreSQL-backed library to save chosen receipt drafts and split groups. See the [account setup and verification guide](docs/AUTHENTICATION.md) and [migration and rollback guide](docs/AUTH_MIGRATION.md).
+
 ## Checks
 
     npm run typecheck

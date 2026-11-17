@@ -200,6 +200,10 @@ summary::marker {
 .brand-dot {
   color: var(--green);
 }
+.site-header .account-entry {
+  min-height: 44px;
+  white-space: nowrap;
+}
 .site-header nav {
   display: flex;
   align-items: center;

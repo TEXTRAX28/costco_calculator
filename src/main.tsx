@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { readAccountRoute } from "./account/use-account";
 import { STORAGE_KEY } from "./lib/storage";
 import "./styles.css";
 
@@ -45,10 +46,11 @@ class ErrorBoundary extends React.Component<
     return this.props.children;
   }
 }
+const initialAccountRoute = readAccountRoute();
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <App accountRoute={initialAccountRoute} />
     </ErrorBoundary>
   </React.StrictMode>,
 );
