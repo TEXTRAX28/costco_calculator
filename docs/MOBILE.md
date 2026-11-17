@@ -27,6 +27,14 @@ npm run mobile:sync:ios
 npx cap open ios
 ```
 
+## iPhone from Windows
+
+Push an `iphone-test-*` tag pointing to a Capacitor commit to run **Build Gather for iPhone** on GitHub's macOS runner. It compiles the device app with Xcode and uploads an unsigned IPA plus its SHA-256 checksum. Download and unzip `gather-iphone-unsigned` from the run's Artifacts section. Standard hosted runners are free for public repositories. [Runner images](https://docs.github.com/en/actions/reference/runners/github-hosted-runners) · [GitHub Actions billing](https://docs.github.com/en/actions/concepts/billing-and-usage)
+
+For a personal test with a free Apple Account, set up AltServer from its official Windows guide and connect your unlocked iPhone by USB. Hold Shift while clicking the AltServer tray icon, choose **Sideload .ipa…**, and select the iPhone and `Gather-iPhone-unsigned.ipa`. Enter Apple sign-in details in AltServer. Follow the iPhone prompts to trust the development app and enable Developer Mode if required. The development signature lasts seven days. [AltServer for Windows](https://faq.altstore.io/altstore-classic/how-to-install-altstore-windows) · [Direct IPA installation](https://faq.altstore.io/release-notes/altserver) · [Apple Developer Mode](https://developer.apple.com/documentation/xcode/enabling-developer-mode-on-a-device)
+
+TestFlight is Apple's distribution option for repeated testing and requires an Apple Developer Program membership and a signed upload. [Apple beta distribution](https://developer.apple.com/documentation/xcode/distributing-your-app-for-beta-testing-and-releases/)
+
 ## Oracle and the backend
 
 Oracle Cloud is an option for running the Gather website and HTTPS Node API when the PC is off. A small VM can also run a persistent PostgreSQL database if account storage is added to the deployed build. Capacitor creates the phone apps locally. To enable native scanning later, connect the signed app to the approved HTTPS API with its access controls and scan allowance. The operator keeps the OpenAI key on the server. Oracle’s current Always Free eligibility and available capacity depend on the account’s home region. Receipt scans use the operator’s OpenAI project credits. [Oracle Always Free resources](https://docs.oracle.com/en-us/iaas/Content/FreeTier/freetier_topic-Always_Free_Resources.htm)

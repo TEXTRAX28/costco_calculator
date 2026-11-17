@@ -1,0 +1,54 @@
+name: Build Gather for iPhone
+
+on:
+  push:
+    tags: ["iphone-test-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned:
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run mobile:sync:ios
+      - name: Compile and package the unsigned device app
+        shell: bash
+        run: |
+          build_dir="$RUNNER_TEMP/gather-ios"
+          xcodebuild -version
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$build_dir" CODE_SIGNING_ALLOWED=NO build
+
+          app="$build_dir/Build/Products/Release-iphoneos/App.app"
+          test -x "$app/App"
+          xcrun lipo "$app/App" -verify_arch arm64
+          test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleSupportedPlatforms:0' "$app/Info.plist")" = iPhoneOS
+          cmp dist/index.html "$app/public/index.html"
+
+          staging="$RUNNER_TEMP/gather-package"
+          mkdir -p "$staging/Payload"
+          ditto "$app" "$staging/Payload/App.app"
+          cd "$RUNNER_TEMP"
+          ditto -c -k --norsrc --keepParent "$staging/Payload" Gather-iPhone-unsigned.ipa
+          shasum -a 256 Gather-iPhone-unsigned.ipa > Gather-iPhone-unsigned.ipa.sha256
+      - name: Upload the IPA and checksum
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: gather-iphone-unsigned
+          path: |
+            ${{ runner.temp }}/Gather-iPhone-unsigned.ipa
+            ${{ runner.temp }}/Gather-iPhone-unsigned.ipa.sha256
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
