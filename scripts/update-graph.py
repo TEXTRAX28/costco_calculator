@@ -33,7 +33,7 @@ COMMUNITY_NAMES = {
     "engine": "Tax and Split Allocation",
     "App": "Receipt Editing Workflow",
     "openai": "OpenAI Receipt Extraction",
-    "receipt-api": "Gemini Receipt Extraction",
+    "receipt-api": "Receipt Scan API",
     "images": "Image Validation and Preparation",
     "model": "Draft Models and Persistence",
     "parser": "Pasted Receipt Text Parsing",
