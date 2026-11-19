@@ -157,3 +157,8 @@ export const appSchema = z
         });
     }
   });
+
+// Older Library entries have the same fields and no final confirmation.
+export const savedReceiptSchema = appSchema.safeExtend({
+  savedAsFinal: z.literal(true).optional(),
+});

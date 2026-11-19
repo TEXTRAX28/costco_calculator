@@ -139,7 +139,10 @@ p.account-error {
 }
 
 .account-library-head {
-  align-items: start;
+  padding: clamp(1rem, 4vw, 1.65rem);
+  border: 1px solid #cbd5c0;
+  border-radius: 1.4rem;
+  background: linear-gradient(115deg, var(--sage-light), var(--surface) 80%);
 }
 
 .account-library-grid {
@@ -157,19 +160,38 @@ p.account-error {
 }
 
 .saved-list {
+  display: grid;
+  gap: 0.65rem;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
-.saved-list li {
+.saved-entry {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 0.45rem;
-  border-bottom: 1px solid var(--border);
-  padding-block: 0.25rem;
+  gap: 0.6rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.9rem;
+  background: var(--canvas);
   overflow-wrap: anywhere;
+}
+
+.saved-entry-details {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.saved-entry-icon {
+  display: grid;
+  place-items: center;
+  width: 2.45rem;
+  height: 2.45rem;
+  border-radius: 0.8rem;
+  background: var(--sage);
+  color: var(--green);
 }
 
 .saved-list time {
@@ -180,11 +202,23 @@ p.account-error {
 
 .saved-actions {
   justify-content: end;
-  gap: 0.25rem;
+  gap: 0.25rem 0.75rem;
 }
 
 .saved-actions .text-button {
-  padding-inline: 0.4rem;
+  padding-inline: 0.25rem;
+}
+
+.saved-actions .saved-open {
+  margin-inline-end: auto;
+}
+
+.library-save-current {
+  margin-top: 1rem;
+}
+
+.library-save-current .account-error {
+  margin-top: 0.7rem;
 }
 
 .account-remove {

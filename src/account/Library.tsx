@@ -1,13 +1,22 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { FolderOpen, LogOut, ReceiptText, UsersRound } from "lucide-react";
+import {
+  ArrowRight,
+  Bookmark,
+  Check,
+  LogOut,
+  ReceiptText,
+  UsersRound,
+} from "lucide-react";
 import type { AppState } from "../lib/model";
 import {
   AccountRequestError,
   accounts,
   type AccountEntry,
+  type SavedReceiptEntry,
   type Session,
 } from "./client";
 import type { useAccount } from "./use-account";
+import type { ReceiptSave } from "./use-receipt-save";
 
 type Kind = "receipts" | "groups";
 
@@ -15,13 +24,15 @@ export function Library({
   account,
   session,
   draft,
+  receiptSave,
   onOpenReceipt,
   onUseGroup,
 }: {
   account: ReturnType<typeof useAccount>;
   session: Session;
   draft: AppState;
-  onOpenReceipt: (draft: AppState) => void;
+  receiptSave: ReceiptSave;
+  onOpenReceipt: (entry: SavedReceiptEntry) => void;
   onUseGroup: (names: string[]) => void;
 }) {
   const [entries, setEntries] = useState<Record<Kind, AccountEntry[]>>({
@@ -33,11 +44,10 @@ export function Library({
   const [name, setName] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const working = busy || receiptSave.saving;
   const busyRef = useRef(false);
   const mounted = useRef(false);
-  const saveId = useRef<
-    Partial<Record<Kind, { id: string; signature: string }>>
-  >({});
+  const groupSave = useRef<{ id: string; signature: string } | null>(null);
 
   function fail(reason: unknown) {
     if (!mounted.current) return;
@@ -96,30 +106,41 @@ export function Library({
     }
   }
 
-  function save(kind: Kind, payload: unknown) {
+  function saveReceipt() {
+    void run(async () => {
+      const entry = await receiptSave.save();
+      if (!mounted.current || !entry) return;
+      setEntries((prior) => ({
+        ...prior,
+        receipts: [
+          entry,
+          ...prior.receipts.filter(({ id }) => id !== entry.id),
+        ],
+      }));
+      setNotice("Receipt saved to your account.");
+    });
+  }
+
+  function saveGroup(payload: { name: string; people: string[] }) {
     void run(async () => {
       const signature = JSON.stringify(payload);
-      const previous = saveId.current[kind];
+      const previous = groupSave.current;
       const id =
         previous?.signature === signature ? previous.id : crypto.randomUUID();
-      saveId.current[kind] = { id, signature };
-      const result = await accounts.save(kind, id, payload);
+      groupSave.current = { id, signature };
+      const result = await accounts.save("groups", id, payload);
       if (!mounted.current) return;
-      delete saveId.current[kind];
+      groupSave.current = null;
       account.touch(result.expiresAt);
       setEntries((prior) => ({
         ...prior,
-        [kind]: [
+        groups: [
           result.document,
-          ...prior[kind].filter((item) => item.id !== id),
+          ...prior.groups.filter((item) => item.id !== id),
         ],
       }));
-      if (kind === "groups") setName("");
-      setNotice(
-        kind === "receipts"
-          ? "Receipt saved to your account."
-          : "Split group saved to your account.",
-      );
+      setName("");
+      setNotice("Split group saved to your account.");
     });
   }
 
@@ -129,7 +150,7 @@ export function Library({
         const result = await accounts.receipt(id);
         if (!mounted.current) return;
         account.touch(result.expiresAt);
-        onOpenReceipt(result.document.payload);
+        onOpenReceipt(result.document);
       } else {
         const result = await accounts.group(id);
         if (!mounted.current) return;
@@ -146,6 +167,7 @@ export function Library({
       const result = await accounts.remove(kind, entry.id);
       if (!mounted.current) return;
       account.touch(result.expiresAt);
+      if (kind === "receipts") receiptSave.forget(entry.id);
       setEntries((prior) => ({
         ...prior,
         [kind]: prior[kind].filter(({ id }) => id !== entry.id),
@@ -164,33 +186,52 @@ export function Library({
   const people = draft.people.map(({ name }) => name.trim()).filter(Boolean);
   function submitGroup(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (name.trim() && people.length)
-      save("groups", { name: name.trim(), people });
+    if (name.trim() && people.length) saveGroup({ name: name.trim(), people });
   }
 
   function list(kind: Kind) {
     return entries[kind].length ? (
       <ul className="saved-list">
         {entries[kind].map((entry) => (
-          <li key={entry.id}>
-            <div>
-              <strong>{entry.title}</strong>
-              <time dateTime={new Date(entry.savedAt).toISOString()}>
-                {new Date(entry.savedAt).toLocaleDateString()}
-              </time>
+          <li className="saved-entry" key={entry.id}>
+            <div className="saved-entry-details">
+              <span className="saved-entry-icon">
+                {kind === "receipts" ? (
+                  <ReceiptText size={19} aria-hidden="true" />
+                ) : (
+                  <UsersRound size={19} aria-hidden="true" />
+                )}
+              </span>
+              <span>
+                <strong>{entry.title}</strong>
+                <time dateTime={new Date(entry.savedAt).toISOString()}>
+                  {new Date(entry.savedAt).toLocaleDateString(undefined, {
+                    day: "numeric",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </time>
+              </span>
             </div>
             <div className="saved-actions">
               <button
-                className="text-button"
-                disabled={busy}
+                type="button"
+                className="button button-outline saved-open"
+                disabled={working}
                 onClick={() => open(kind, entry.id)}
-                aria-label={`Open ${entry.title}`}
+                aria-label={
+                  kind === "receipts"
+                    ? `Open receipt ${entry.title}`
+                    : `Use group ${entry.title}`
+                }
               >
-                {kind === "receipts" ? "Open copy" : "Use"}
+                {kind === "receipts" ? "Open receipt" : "Use group"}
+                <ArrowRight size={16} aria-hidden="true" />
               </button>
               <button
+                type="button"
                 className="text-button account-remove"
-                disabled={busy}
+                disabled={working}
                 onClick={() => remove(kind, entry)}
                 aria-label={`Remove ${entry.title}`}
               >
@@ -214,13 +255,13 @@ export function Library({
       <div className="account-library-head">
         <div>
           <h1 id="account-title" tabIndex={-1}>
-            Your account
+            Your Library
           </h1>
           <p className="account-lead">{session.user.email}</p>
         </div>
         <button
           className="button button-outline"
-          disabled={busy}
+          disabled={working}
           onClick={() => signOut(false)}
         >
           <LogOut size={18} aria-hidden="true" /> Sign out
@@ -237,7 +278,7 @@ export function Library({
               setInitializing(true);
               void run(load);
             }}
-            disabled={busy}
+            disabled={working}
           >
             Refresh saved entries
           </button>
@@ -248,32 +289,37 @@ export function Library({
           {notice}
         </p>
       )}
-      <div className="account-library-grid" aria-busy={initializing || busy}>
+      <div className="account-library-grid" aria-busy={initializing || working}>
         <section className="account-panel" aria-labelledby="saved-receipts">
           <h2 id="saved-receipts">
             <ReceiptText size={21} aria-hidden="true" /> Saved receipts
           </h2>
           {list("receipts")}
-          <p className="account-lead">
-            Save the current receipt details and split. Original photos and PDFs
-            stay on this device.
-          </p>
-          <button
-            className="button button-primary"
-            disabled={busy || !draft.receipt.items.length}
-            onClick={() =>
-              save("receipts", {
-                ...draft,
-                receipt: { ...draft.receipt, rawText: "" },
-              })
-            }
-          >
-            <FolderOpen size={18} aria-hidden="true" /> Save current receipt
-          </button>
-          {!draft.receipt.items.length && (
-            <p className="account-empty">
-              Add a receipt in the workspace to save it here.
-            </p>
+          {draft.receipt.items.length > 0 && (
+            <div className="library-save-current">
+              <button
+                type="button"
+                className="button button-outline"
+                disabled={initializing || working || receiptSave.saved}
+                onClick={saveReceipt}
+              >
+                {receiptSave.saved ? (
+                  <Check size={18} aria-hidden="true" />
+                ) : (
+                  <Bookmark size={18} aria-hidden="true" />
+                )}
+                {receiptSave.saving
+                  ? "Saving…"
+                  : receiptSave.saved
+                    ? "Current receipt saved"
+                    : "Save current receipt"}
+              </button>
+              {receiptSave.error && (
+                <p className="account-error" role="alert">
+                  {receiptSave.error}
+                </p>
+              )}
+            </div>
           )}
         </section>
         <section className="account-panel" aria-labelledby="saved-groups">
@@ -290,12 +336,14 @@ export function Library({
                 maxLength={80}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                disabled={!people.length || busy}
+                disabled={!people.length || working}
               />
             </label>
             <button
               className="button button-outline"
-              disabled={busy || !people.length || !name.trim()}
+              disabled={
+                initializing || working || !people.length || !name.trim()
+              }
             >
               Save people from this split
             </button>
@@ -310,7 +358,7 @@ export function Library({
       <button
         type="button"
         className="text-button"
-        disabled={busy}
+        disabled={working}
         onClick={() => signOut(true)}
       >
         Sign out on all devices

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { appSchema } from "../lib/model";
+import { savedReceiptSchema } from "../lib/draft-schema.mjs";
 
 const sessionSchema = z.object({
   user: z.object({ id: z.uuid(), email: z.email() }),
@@ -21,6 +21,8 @@ const group = z.object({ name: z.string(), people: z.array(z.string()) });
 export type Session = z.infer<typeof sessionSchema>;
 export type AccountStatus = z.infer<typeof accountStatus> & { notice?: string };
 export type AccountEntry = z.infer<typeof entry>;
+export type SavedReceipt = z.infer<typeof savedReceiptSchema>;
+export type SavedReceiptEntry = AccountEntry & { payload: SavedReceipt };
 
 export class AccountRequestError extends Error {
   constructor(
@@ -136,7 +138,7 @@ export const accounts = {
     request(
       pathFor("receipts", id),
       z.object({
-        document: entry.extend({ payload: appSchema }),
+        document: entry.extend({ payload: savedReceiptSchema }),
         expiresAt: z.number(),
       }),
     ),

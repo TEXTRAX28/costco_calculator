@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { appSchema } from "../../src/lib/draft-schema.mjs";
+import { savedReceiptSchema } from "../../src/lib/draft-schema.mjs";
 import { AuthError } from "./errors.mjs";
 
 const limits = { receipts: 100, groups: 50 };
@@ -17,7 +17,7 @@ function draftPayload(draft) {
 }
 
 export const documentSchemas = {
-  receipts: appSchema.transform(draftPayload),
+  receipts: savedReceiptSchema.transform(draftPayload),
   groups: group,
 };
 

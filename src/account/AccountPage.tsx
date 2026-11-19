@@ -4,12 +4,15 @@ import LegalNotice from "../LegalNotice";
 import type { AppState } from "../lib/model";
 import { SignInForm } from "./SignInForm";
 import { Library } from "./Library";
+import type { SavedReceiptEntry } from "./client";
 import type { useAccount } from "./use-account";
+import type { ReceiptSave } from "./use-receipt-save";
 import "./account.css";
 
 export function AccountPage({
   account,
   draft,
+  receiptSave,
   keepWorkspaceOpen,
   onReturn,
   onOpenReceipt,
@@ -17,9 +20,10 @@ export function AccountPage({
 }: {
   account: ReturnType<typeof useAccount>;
   draft: AppState;
+  receiptSave: ReceiptSave;
   keepWorkspaceOpen: boolean;
   onReturn: () => void;
-  onOpenReceipt: (draft: AppState) => void;
+  onOpenReceipt: (entry: SavedReceiptEntry) => void;
   onUseGroup: (names: string[]) => void;
 }) {
   const page = useRef<HTMLElement>(null);
@@ -92,7 +96,14 @@ export function AccountPage({
         ) : isLibrary && session ? (
           <Library
             key={session.user.id}
-            {...{ account, session, draft, onOpenReceipt, onUseGroup }}
+            {...{
+              account,
+              session,
+              draft,
+              receiptSave,
+              onOpenReceipt,
+              onUseGroup,
+            }}
           />
         ) : (
           <section className="account-card">

@@ -100,6 +100,9 @@ import LegalNotice, { type LegalPage } from "./LegalNotice";
 import AppUpdate from "./AppUpdate";
 import PreviewPairing from "./PreviewPairing";
 import { useAccount } from "./account/use-account";
+import { receiptToSave, reopenSavedReceipt } from "./account/receipt-copy";
+import { SummarySaveCard } from "./account/SummarySaveCard";
+import { useReceiptSave } from "./account/use-receipt-save";
 
 const AccountPage = lazy(async () => ({
   default: (await import("./account/AccountPage")).AccountPage,
@@ -304,6 +307,7 @@ export default function App({
     }
   }, []);
   const [state, setState] = useState<AppState>(initial.state);
+  const [openedReceiptId, setOpenedReceiptId] = useState<string | null>(null);
   const [notice, setNotice] = useState(initial.warning);
   const [saveError, setSaveError] = useState("");
   const [draftSaved, setDraftSaved] = useState(initial.saved);
@@ -445,6 +449,8 @@ export default function App({
     state.finalizedStamp !== "" &&
     state.finalizedStamp === finalStamp(state) &&
     result.canFinalize;
+  const receiptSave = useReceiptSave(account, state, finalized);
+  const showingSavedReceipt = state.receipt.id === openedReceiptId;
   useEffect(() => setAiConsented(false), [images]);
   useEffect(() => {
     if (!online || !openaiConfig?.configured) setAiConsented(false);
@@ -503,9 +509,10 @@ export default function App({
     }
   }, [legalPage, zoomImage, cropTarget]);
   useEffect(() => {
-    if (validation?.step === state.step) return;
+    if (account.route.view !== "workspace" || validation?.step === state.step)
+      return;
     document.getElementById("screen-title")?.focus({ preventScroll: true });
-  }, [state.step]);
+  }, [state.step, account.route.view]);
   const navigate = (step: Step) => {
     setValidation(null);
     setValidationAttempted(null);
@@ -885,14 +892,25 @@ export default function App({
         <AccountPage
           account={account}
           draft={state}
+          receiptSave={receiptSave}
           keepWorkspaceOpen={Boolean(images.length || rawText || saveError)}
           onReturn={() => {
             account.go("/", true);
             requestAnimationFrame(() => accountTrigger.current?.focus());
           }}
-          onOpenReceipt={(draft) => {
+          onOpenReceipt={({ payload: draft, ...entry }) => {
+            const opened = reopenSavedReceipt(draft);
+            const current = receiptToSave(state, finalized);
+            const openedCopy = receiptToSave(
+              opened,
+              Boolean(opened.finalizedStamp),
+            );
+            const sameCopy =
+              current && JSON.stringify(current) === JSON.stringify(openedCopy);
             if (
-              (state.receipt.items.length || images.length || rawText) &&
+              ((state.receipt.items.length && !sameCopy) ||
+                images.length ||
+                rawText) &&
               !window.confirm(
                 "Open this saved receipt and replace the current draft on this device?",
               )
@@ -901,13 +919,18 @@ export default function App({
             images.forEach((image) => URL.revokeObjectURL(image.url));
             setImages([]);
             setRawText("");
+            setImageError("");
             setScanCurrency("");
             setAiConsented(false);
             setValidation(null);
             setValidationAttempted(null);
-            setState(prepareSavedReceiptReview(draft));
-            setNotice("Opened a saved receipt.");
+            setState(opened);
+            setOpenedReceiptId(opened.receipt.id);
+            if (opened.receipt === draft.receipt)
+              receiptSave.markOpened(entry, openedCopy);
+            setNotice("");
             account.go("/", true);
+            window.scrollTo({ top: 0, behavior: "instant" });
           }}
           onUseGroup={(names) => {
             const existing = new Set(
@@ -1470,7 +1493,9 @@ export default function App({
               }
               title={
                 state.step === "review"
-                  ? "Your receipt."
+                  ? showingSavedReceipt
+                    ? "Your saved receipt."
+                    : "Your receipt."
                   : state.step === "people"
                     ? "Who’s in on the shop?"
                     : state.step === "assign"
@@ -1488,7 +1513,9 @@ export default function App({
                     ? "Tick who shares each item. Use quantities or custom shares when you need them."
                     : finalized
                       ? "Your receipt balances, and everyone has a clear share. Ready for the group chat."
-                      : "These are draft amounts. Resolve the remaining details before finalizing."}
+                      : result.canFinalize
+                        ? "See how much each person owes."
+                        : "Check the remaining details before finalizing."}
             </SectionIntro>
             <div
               className={`workspace${state.step === "review" ? " workspace-receipt" : ""}`}
@@ -1496,6 +1523,17 @@ export default function App({
               <div className="workspace-main">
                 {state.step === "review" && (
                   <>
+                    {showingSavedReceipt && state.people.length > 0 && (
+                      <div className="saved-receipt-shortcut">
+                        <button
+                          type="button"
+                          className="button button-outline"
+                          onClick={() => navigate("summary")}
+                        >
+                          View split <ArrowRight size={17} aria-hidden="true" />
+                        </button>
+                      </div>
+                    )}
                     <ReceiptSnapshot
                       receipt={state.receipt}
                       result={receiptResult}
@@ -1525,7 +1563,10 @@ export default function App({
                     <details
                       id="receipt-editor"
                       className="receipt-editor-disclosure"
-                      open={state.receipt.source === "manual"}
+                      open={
+                        state.receipt.source === "manual" &&
+                        !showingSavedReceipt
+                      }
                     >
                       <summary>Edit fields and receipt text</summary>
                       {state.receipt.warnings.length > 0 && (
@@ -2582,12 +2623,16 @@ export default function App({
                         <h2>
                           {finalized
                             ? "All balanced. All accounted for."
-                            : "A work in progress."}
+                            : result.canFinalize
+                              ? "Ready to finalize"
+                              : "A work in progress."}
                         </h2>
                         <p>
                           {finalized
                             ? `${f(result.assignedTotal)} shared across ${state.people.length} ${state.people.length === 1 ? "person" : "people"}.`
-                            : "These amounts are a draft. Check unresolved details before sharing as final."}
+                            : result.canFinalize
+                              ? "This split balances. Confirm it before sharing."
+                              : "These amounts are a draft. Check the issues below before sharing as final."}
                         </p>
                       </div>
                     </div>
@@ -2599,7 +2644,7 @@ export default function App({
                         />
                         {result.canFinalize && (
                           <button
-                            className="button button-primary"
+                            className="button button-primary summary-finalize"
                             onClick={finalize}
                           >
                             Finalize checked split
@@ -2608,6 +2653,16 @@ export default function App({
                         )}
                       </>
                     )}
+                    {account.status.availability === "ready" &&
+                      state.receipt.items.length > 0 && (
+                        <SummarySaveCard
+                          signedIn={Boolean(account.status.session)}
+                          finalized={finalized}
+                          receiptSave={receiptSave}
+                          onSignIn={() => account.go("/auth")}
+                          onOpenLibrary={() => account.go("/?account=1")}
+                        />
+                      )}
                     <div className="person-breakdowns">
                       {result.totals.map((entry, i) => (
                         <details
@@ -2671,8 +2726,8 @@ export default function App({
                       </span>
                       <h2>Good to go. Good to share.</h2>
                       <p>
-                        Send the breakdown to your group chat, or save a copy
-                        for later.
+                        Copy the breakdown to your group chat or download it as
+                        text.
                       </p>
                       <div className="share-actions">
                         <button

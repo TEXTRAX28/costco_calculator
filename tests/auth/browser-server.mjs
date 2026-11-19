@@ -52,6 +52,8 @@ const provider = syntheticPassword();
 provider.add(email, passphrase, true);
 provider.add("mobile-" + email, passphrase, true);
 provider.add("webkit-mobile-" + email, passphrase, true);
+for (const project of ["desktop", "mobile", "webkit-mobile"])
+  provider.add("library-" + project + "-" + email, passphrase, true);
 const scan = createReceiptApi();
 const server = await fixtureServer({
   database,
