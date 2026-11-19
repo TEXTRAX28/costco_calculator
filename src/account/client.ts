@@ -23,6 +23,7 @@ export type AccountStatus = z.infer<typeof accountStatus> & { notice?: string };
 export type AccountEntry = z.infer<typeof entry>;
 export type SavedReceipt = z.infer<typeof savedReceiptSchema>;
 export type SavedReceiptEntry = AccountEntry & { payload: SavedReceipt };
+export type ReceiptNameChoice = { title: string; allowDuplicateTitle?: true };
 
 export class AccountRequestError extends Error {
   constructor(
@@ -150,13 +151,18 @@ export const accounts = {
         expiresAt: z.number(),
       }),
     ),
-  save: (kind: "receipts" | "groups", id: string, payload: unknown) =>
+  save: (
+    kind: "receipts" | "groups",
+    id: string,
+    payload: unknown,
+    name?: ReceiptNameChoice,
+  ) =>
     request(
       pathFor(kind, id),
       z.object({ document: entry, expiresAt: z.number() }),
       {
         method: "PUT",
-        body: { payload },
+        body: { payload, ...name },
       },
     ),
   remove: (kind: "receipts" | "groups", id: string) =>

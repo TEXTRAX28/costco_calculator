@@ -3,7 +3,7 @@ import { z } from "zod";
 import { authError, AuthError } from "./errors.mjs";
 import { emailSchema, newPasswordSchema, passwordSchema } from "./identity.mjs";
 import { safeDestination } from "./service.mjs";
-import { documentSchemas } from "./documents.mjs";
+import { documentSaveSchemas } from "./documents.mjs";
 
 const sessionCookie = "__Host-gather-session";
 const oauthCookie = "__Host-gather-oauth";
@@ -260,12 +260,12 @@ export function accountApi({
           return send({ ok: true });
         }
         await service.throttleSave(ip, owner);
-        const body = parse(
-          z.strictObject({ payload: documentSchemas[kind] }),
+        const { payload, ...options } = parse(
+          documentSaveSchemas[kind],
           await readJson(req, kind === "receipts" ? 800_000 : 8192),
         );
         return send({
-          document: await documents.save(owner, kind, id, body.payload),
+          document: await documents.save(owner, kind, id, payload, options),
         });
       }
 

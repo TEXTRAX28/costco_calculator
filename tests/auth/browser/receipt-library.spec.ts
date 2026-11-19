@@ -174,3 +174,103 @@ test("save from Summary, then reopen itemized receipts and their original split"
     page.getByRole("heading", { name: "Ready to finalize" }),
   ).toBeVisible();
 });
+
+test("warn on a duplicate receipt name and delete only the copy the user confirms", async ({
+  page,
+}, info) => {
+  if (info.project.name !== "desktop")
+    await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Try the Costco demo" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await signIn(page, "names-" + info.project.name + "-" + email);
+  await expect(
+    page.getByRole("button", { name: "Account", exact: true }),
+  ).toBeVisible();
+
+  const original = { ...newState(), receipt: costcoDemo() };
+  const origin = new URL(page.url()).origin;
+  const seeded = await page.request.put(
+    "/api/account/receipts/" + randomUUID(),
+    {
+      headers: { Origin: origin },
+      data: { payload: original },
+    },
+  );
+  expect(seeded.ok()).toBe(true);
+  await page
+    .getByRole("navigation", { name: "Receipt workflow" })
+    .getByRole("button", { name: /Summary/ })
+    .click();
+  const summary = page.getByRole("region", { name: "Keep this receipt" });
+  const save = summary.getByRole("button", { name: "Save draft" });
+  const nameDialog = page.getByRole("dialog", {
+    name: "This receipt name is already used",
+  });
+  const counts = async () =>
+    (await (await page.request.get("/api/account/receipts")).json()).entries
+      .length;
+
+  await save.click();
+  await expect(nameDialog).toBeVisible();
+  await expect(nameDialog.getByText(/named “Costco”/)).toBeVisible();
+  await expect(
+    nameDialog.getByRole("button", { name: "Cancel" }),
+  ).toBeFocused();
+  await nameDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(nameDialog).toHaveCount(0);
+  expect(await counts()).toBe(1);
+
+  await save.click();
+  await nameDialog
+    .getByRole("textbox", { name: "Receipt name" })
+    .fill("Costco · Weekly shop");
+  await nameDialog.getByRole("button", { name: "Save with new name" }).click();
+  await summary.getByRole("button", { name: "View Library" }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "Open receipt Costco · Weekly shop",
+      exact: true,
+    }),
+  ).toBeVisible();
+
+  const remove = page.getByRole("button", {
+    name: "Delete receipt Costco · Weekly shop",
+    exact: true,
+  });
+  const deleteDialog = page.getByRole("dialog", {
+    name: "Are you sure you want to delete this receipt?",
+  });
+  await remove.click();
+  await expect(deleteDialog.getByText(/“Costco · Weekly shop”/)).toBeVisible();
+  await expect(
+    deleteDialog.getByRole("button", { name: "Cancel" }),
+  ).toBeFocused();
+  await deleteDialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(remove).toBeVisible();
+  expect(await counts()).toBe(2);
+  await remove.click();
+  await deleteDialog
+    .getByRole("button", { name: "Delete receipt", exact: true })
+    .click();
+  await expect(remove).toHaveCount(0);
+  await expect(page.getByRole("status")).toHaveText("Receipt deleted.");
+  await expect(
+    page.getByRole("button", { name: "Open receipt Costco", exact: true }),
+  ).toHaveCount(1);
+
+  await page.getByRole("button", { name: "Save current receipt" }).click();
+  await expect(nameDialog).toBeVisible();
+  expect(
+    (
+      await new AxeBuilder({ page })
+        .include(".receipt-library-dialog")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
+        .analyze()
+    ).violations,
+  ).toEqual([]);
+  await nameDialog.getByRole("button", { name: "Keep both receipts" }).click();
+  await expect(
+    page.getByRole("button", { name: "Open receipt Costco", exact: true }),
+  ).toHaveCount(2);
+});

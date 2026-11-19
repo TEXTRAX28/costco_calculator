@@ -15,8 +15,16 @@ export default defineConfig({
     trace: "retain-on-failure",
     serviceWorkers: "block",
   },
+  // Give each browser its own synthetic IP in the local authentication fixture.
   projects: [
-    { name: "desktop", use: { ...devices["Desktop Chrome"], channel } },
+    {
+      name: "desktop",
+      use: {
+        ...devices["Desktop Chrome"],
+        channel,
+        extraHTTPHeaders: { "X-Gather-Client-IP": "192.0.2.101" },
+      },
+    },
     {
       name: "mobile",
       use: {
@@ -24,9 +32,16 @@ export default defineConfig({
         defaultBrowserType: "chromium",
         channel,
         deviceScaleFactor: 1,
+        extraHTTPHeaders: { "X-Gather-Client-IP": "192.0.2.102" },
       },
     },
-    { name: "webkit-mobile", use: { ...devices["iPhone 13"] } },
+    {
+      name: "webkit-mobile",
+      use: {
+        ...devices["iPhone 13"],
+        extraHTTPHeaders: { "X-Gather-Client-IP": "192.0.2.103" },
+      },
+    },
   ],
   webServer: {
     command: "node tests/auth/browser-server.mjs",

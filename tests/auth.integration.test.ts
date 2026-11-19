@@ -230,6 +230,58 @@ describe("account integration with the migrated PostgreSQL schema", () => {
     expect((await call("/api/account/receipts", { cookie })).status).toBe(200);
   });
 
+  it("requires confirmation before saving another receipt with the same normalized name", async () => {
+    const firstAddress = "receipt-name-first@example.test";
+    const secondAddress = "receipt-name-second@example.test";
+    provider.add(firstAddress, passphrase, true);
+    provider.add(secondAddress, passphrase, true);
+    const owner = cookiePair(
+      await signIn(firstAddress, undefined, "192.0.2.187"),
+    );
+    const otherOwner = cookiePair(
+      await signIn(secondAddress, undefined, "192.0.2.188"),
+    );
+    const payload = newState();
+    payload.receipt.merchant = "Costco Shop";
+    payload.receipt.items.push(newItem());
+    const path = () => "/api/account/receipts/" + randomUUID();
+    const save = (
+      id: string,
+      cookie: string,
+      title?: string,
+      allowDuplicateTitle?: true,
+    ) =>
+      call(id, {
+        method: "PUT",
+        cookie,
+        body: { payload, title, allowDuplicateTitle },
+      });
+    const first = path();
+    const second = path();
+    const results = await Promise.all([
+      save(first, owner),
+      save(second, owner, "  coSTco   SHOp  "),
+    ]);
+    expect(results.map(({ status }) => status).sort()).toEqual([200, 409]);
+    const index = results.findIndex(({ status }) => status === 409);
+    expect(await results[index].json()).toMatchObject({
+      code: "duplicate_receipt_name",
+    });
+    const waiting = index === 0 ? first : second;
+    expect((await save(waiting, owner, "Costco Shop", true)).status).toBe(200);
+    expect((await save(waiting, owner, "Costco Shop")).status).toBe(200);
+
+    const renamed = path();
+    const rename = await save(renamed, owner, "Costco · Weekly shop");
+    expect(rename.status).toBe(200);
+    expect((await rename.json()).document.title).toBe("Costco · Weekly shop");
+    const entry = await call(renamed, { cookie: owner }).then((response) =>
+      response.json(),
+    );
+    expect(entry.document.payload.receipt.merchant).toBe("Costco Shop");
+    expect((await save(path(), otherOwner)).status).toBe(200);
+  });
+
   it("keeps receipt, group and history ownership private and saves only by explicit authenticated request", async () => {
     const a = cookiePair(await signIn(alice, undefined, "192.0.2.185"));
     const b = cookiePair(await signIn(bob, undefined, "192.0.2.186"));

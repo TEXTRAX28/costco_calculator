@@ -12,9 +12,11 @@ import {
   AccountRequestError,
   accounts,
   type AccountEntry,
+  type ReceiptNameChoice,
   type SavedReceiptEntry,
   type Session,
 } from "./client";
+import { DeleteReceiptDialog, ReceiptNameDialog } from "./ReceiptDialogs";
 import type { useAccount } from "./use-account";
 import type { ReceiptSave } from "./use-receipt-save";
 
@@ -44,6 +46,9 @@ export function Library({
   const [name, setName] = useState("");
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [receiptToDelete, setReceiptToDelete] = useState<AccountEntry | null>(
+    null,
+  );
   const working = busy || receiptSave.saving;
   const busyRef = useRef(false);
   const mounted = useRef(false);
@@ -106,9 +111,9 @@ export function Library({
     }
   }
 
-  function saveReceipt() {
+  function saveReceipt(name?: ReceiptNameChoice) {
     void run(async () => {
-      const entry = await receiptSave.save();
+      const entry = await receiptSave.save(name);
       if (!mounted.current || !entry) return;
       setEntries((prior) => ({
         ...prior,
@@ -161,8 +166,6 @@ export function Library({
   }
 
   function remove(kind: Kind, entry: AccountEntry) {
-    if (!window.confirm(`Remove “${entry.title}” from your saved ${kind}?`))
-      return;
     void run(async () => {
       const result = await accounts.remove(kind, entry.id);
       if (!mounted.current) return;
@@ -172,7 +175,9 @@ export function Library({
         ...prior,
         [kind]: prior[kind].filter(({ id }) => id !== entry.id),
       }));
-      setNotice("Saved entry removed.");
+      setNotice(
+        kind === "receipts" ? "Receipt deleted." : "Saved group removed.",
+      );
     });
   }
 
@@ -232,10 +237,22 @@ export function Library({
                 type="button"
                 className="text-button account-remove"
                 disabled={working}
-                onClick={() => remove(kind, entry)}
-                aria-label={`Remove ${entry.title}`}
+                onClick={() => {
+                  if (kind === "receipts") setReceiptToDelete(entry);
+                  else if (
+                    window.confirm(
+                      `Remove “${entry.title}” from your saved groups?`,
+                    )
+                  )
+                    remove(kind, entry);
+                }}
+                aria-label={
+                  kind === "receipts"
+                    ? `Delete receipt ${entry.title}`
+                    : `Remove ${entry.title}`
+                }
               >
-                Remove
+                {kind === "receipts" ? "Delete" : "Remove"}
               </button>
             </div>
           </li>
@@ -301,7 +318,7 @@ export function Library({
                 type="button"
                 className="button button-outline"
                 disabled={initializing || working || receiptSave.saved}
-                onClick={saveReceipt}
+                onClick={() => saveReceipt()}
               >
                 {receiptSave.saved ? (
                   <Check size={18} aria-hidden="true" />
@@ -363,6 +380,24 @@ export function Library({
       >
         Sign out on all devices
       </button>
+      {receiptSave.duplicateTitle && (
+        <ReceiptNameDialog
+          key={receiptSave.duplicateTitle}
+          title={receiptSave.duplicateTitle}
+          onSave={saveReceipt}
+          onCancel={receiptSave.cancelName}
+        />
+      )}
+      {receiptToDelete && (
+        <DeleteReceiptDialog
+          entry={receiptToDelete}
+          onCancel={() => setReceiptToDelete(null)}
+          onDelete={() => {
+            setReceiptToDelete(null);
+            remove("receipts", receiptToDelete);
+          }}
+        />
+      )}
     </div>
   );
 }

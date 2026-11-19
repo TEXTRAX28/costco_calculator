@@ -29,6 +29,7 @@ const errors = {
     "Accounts are temporarily unavailable. You can still use Gather as a guest.",
   ],
   not_found: [404, "This saved entry couldn’t be found."],
+  duplicate_receipt_name: [409, "A saved receipt already has this name."],
   save_limit: [409, "Your account’s saved entry limit has been reached."],
 };
 

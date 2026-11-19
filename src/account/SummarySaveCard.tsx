@@ -1,5 +1,6 @@
 import { ArrowRight, Bookmark, Check, LogIn } from "lucide-react";
 import { useId } from "react";
+import { ReceiptNameDialog } from "./ReceiptDialogs";
 import type { ReceiptSave } from "./use-receipt-save";
 
 export function SummarySaveCard({
@@ -70,6 +71,14 @@ export function SummarySaveCard({
         <p className="summary-save-error" role="alert">
           {receiptSave.error}
         </p>
+      )}
+      {receiptSave.duplicateTitle && (
+        <ReceiptNameDialog
+          key={receiptSave.duplicateTitle}
+          title={receiptSave.duplicateTitle}
+          onSave={(name) => void receiptSave.save(name)}
+          onCancel={receiptSave.cancelName}
+        />
       )}
     </section>
   );

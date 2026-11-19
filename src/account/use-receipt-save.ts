@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import type { AppState } from "../lib/model";
+import { defaultReceiptTitle } from "../lib/receipt-title.mjs";
 import {
   AccountRequestError,
   accounts,
   type AccountEntry,
+  type ReceiptNameChoice,
   type SavedReceipt,
 } from "./client";
 import { receiptToSave } from "./receipt-copy";
@@ -13,7 +15,8 @@ type Attempt = {
   owner: string;
   signature: string;
   id: string;
-  phase: "saving" | "saved" | "error";
+  name: ReceiptNameChoice;
+  phase: "saving" | "saved" | "error" | "duplicate";
   entry?: AccountEntry;
   message?: string;
 };
@@ -47,15 +50,20 @@ export function useReceiptSave(
     setAttempt(value);
   }
 
-  async function save() {
+  async function save(name?: ReceiptNameChoice) {
     if (!owner || !canPrepare || latest.current?.phase === "saving") return;
     const previous = matches(latest.current);
     if (previous?.phase === "saved") return previous.entry;
+    if (previous?.phase === "duplicate" && !name) return;
     // Retry with the same ID if the save succeeded but the response was lost.
     const pending = {
       owner,
       signature,
       id: previous?.id || crypto.randomUUID(),
+      name: name ??
+        previous?.name ?? {
+          title: defaultReceiptTitle(draft.receipt.merchant),
+        },
     };
     if (!copy) {
       remember({
@@ -71,11 +79,19 @@ export function useReceiptSave(
         "receipts",
         pending.id,
         copy,
+        pending.name,
       );
       account.touch(expiresAt);
       remember({ ...pending, phase: "saved", entry: document });
       return document;
     } catch (reason) {
+      if (
+        reason instanceof AccountRequestError &&
+        reason.code === "duplicate_receipt_name"
+      ) {
+        remember({ ...pending, phase: "duplicate" });
+        return;
+      }
       if (
         reason instanceof AccountRequestError &&
         reason.code === "session_required"
@@ -97,12 +113,17 @@ export function useReceiptSave(
     saved: current?.phase === "saved",
     saving: attempt?.phase === "saving",
     error: current?.message,
+    duplicateTitle: current?.phase === "duplicate" ? current.name.title : null,
+    cancelName() {
+      if (matches(latest.current)?.phase === "duplicate") remember(null);
+    },
     markOpened(entry: AccountEntry, opened: SavedReceipt | null) {
       if (!owner || !opened || latest.current?.phase === "saving") return;
       remember({
         owner,
         signature: JSON.stringify(opened),
         id: entry.id,
+        name: { title: entry.title },
         phase: "saved",
         entry,
       });
