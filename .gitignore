@@ -6,11 +6,21 @@ dist/
 public/ocr/
 public/ocr-enhanced/
 public/pdf-assets/
-.env
-.env.*
+# Keep local and server-specific environment files out of Git.
+*.env
+*.env.*
 !.env.example
 .npmrc
 .yarnrc.yml
+
+# Firebase service-account downloads and local CLI state.
+credentials/
+.firebase/
+*-firebase-adminsdk-*.json
+firebase-auth-reader.json
+serviceAccountKey.json
+service-account.json
+
 *.key
 *.pem
 *.pfx
@@ -28,6 +38,9 @@ private-receipts/
 *.traineddata.gz
 *.sqlite*
 *.db
+*.dump
+.pgpass
+pgpass.conf
 coverage/
 test-results/
 playwright-report/
